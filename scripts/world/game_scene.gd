@@ -3,6 +3,7 @@ extends Node3D
 @onready var players_node: Node3D = $Players
 @onready var spawn_points: Node3D = $SpawnPoints
 @onready var mobile_ui: Control = $MobileUI
+@onready var pause_menu: Control = $PauseMenu
 
 var player_scene := preload("res://scenes/shared/player.tscn")
 var local_player_id: int = 1

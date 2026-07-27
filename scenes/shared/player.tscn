@@ -1,4 +1,4 @@
-[gd_scene load_steps=7 format=3 uid="uid://player001"]
+[gd_scene load_steps=9 format=3 uid="uid://player001"]
 
 [ext_resource type="Script" path="res://scripts/player/player_controller.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/weapons/rifle.tscn" id="2"]

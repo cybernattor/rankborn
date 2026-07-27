@@ -93,3 +93,8 @@ text = "Начать матч"
 unique_name_in_owner = true
 layout_mode = 2
 custom_minimum_size = Vector2(400, 120)
+
+[node name="ExitButton" type="Button" parent="VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Выход"

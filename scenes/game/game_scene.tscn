@@ -1,7 +1,8 @@
-[gd_scene load_steps=6 format=3 uid="uid://gamescene001"]
+[gd_scene load_steps=8 format=3 uid="uid://gamescene001"]
 
 [ext_resource type="Script" path="res://scripts/world/game_scene.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/ui/mobile_ui.tscn" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/ui/pause_menu.tscn" id="3"]
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_ground"]
 size = Vector2(100, 100)
@@ -45,6 +46,8 @@ shape = SubResource("BoxShape3D_ground")
 [node name="Players" type="Node3D" parent="."]
 
 [node name="MobileUI" parent="." instance=ExtResource("2")]
+
+[node name="PauseMenu" parent="." instance=ExtResource("3")]
 
 [node name="SpawnPoints" type="Node3D" parent="."]
 

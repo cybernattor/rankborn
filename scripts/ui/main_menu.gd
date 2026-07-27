@@ -10,6 +10,7 @@ extends Control
 @onready var ip_label: Label = %IpLabel
 @onready var player_list: ItemList = %PlayerList
 @onready var found_games_list: ItemList = %FoundGamesList
+@onready var exit_button: Button = %ExitButton
 
 var _found_games: Array = []
 var _in_lobby: bool = false
@@ -20,6 +21,7 @@ func _ready() -> void:
 	join_button.pressed.connect(_on_join_pressed)
 	join_selected_button.pressed.connect(_on_join_selected_pressed)
 	start_button.pressed.connect(_on_start_pressed)
+	exit_button.pressed.connect(_on_exit_pressed)
 	found_games_list.item_selected.connect(_on_found_game_selected)
 	found_games_list.item_activated.connect(_on_found_game_activated)
 	NetworkManager.player_connected.connect(_on_player_connected)
@@ -171,3 +173,7 @@ func _update_player_list() -> void:
 	for id in NetworkManager.players:
 		var label: String = "%s (%d)" % [NetworkManager.players[id].name, id]
 		player_list.add_item(label)
+
+
+func _on_exit_pressed() -> void:
+	get_tree().quit()

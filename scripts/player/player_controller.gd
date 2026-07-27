@@ -54,11 +54,15 @@ func _unhandled_input(event: InputEvent) -> void:
 		head.rotate_x(-event.relative.y * MOUSE_SENSITIVITY)
 		head.rotation.x = clamp(head.rotation.x, -PI / 2, PI / 2)
 	if event.is_action_pressed("ui_cancel"):
-		Input.mouse_mode = (
-			Input.MOUSE_MODE_VISIBLE
-			if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
-			else Input.MOUSE_MODE_CAPTURED
-		)
+		var pause_menu = get_tree().current_scene.get_node_or_null("PauseMenu")
+		if pause_menu:
+			pause_menu.toggle()
+		else:
+			Input.mouse_mode = (
+				Input.MOUSE_MODE_VISIBLE
+				if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
+				else Input.MOUSE_MODE_CAPTURED
+			)
 
 
 func _physics_process(delta: float) -> void:
