@@ -6,7 +6,7 @@ extends Node
 signal games_updated(games: Array)
 
 const DISCOVERY_PORT := 7001
-const PROTOCOL_ID := "rankfall"
+const PROTOCOL_ID := "rankborn"
 const BROADCAST_ADDR := "255.255.255.255"
 const QUERY_INTERVAL := 1.5
 const GAME_TIMEOUT := 4.0
@@ -14,7 +14,7 @@ const GAME_TIMEOUT := 4.0
 var _udp := PacketPeerUDP.new()
 var _mode: String = "" # "", "host", "browse"
 var _game_port: int = NetworkManager.DEFAULT_PORT
-var _game_name: String = "Rankfall"
+var _game_name: String = "Rankborn"
 var _query_timer: float = 0.0
 ## key "ip:port" -> Dictionary
 var _found: Dictionary = {}
@@ -46,7 +46,7 @@ func start_browsing() -> void:
 	games_updated([])
 
 
-func start_hosting(game_port: int, game_name: String = "Rankfall") -> void:
+func start_hosting(game_port: int, game_name: String = "Rankborn") -> void:
 	stop()
 	_game_port = game_port
 	_game_name = game_name
@@ -142,7 +142,7 @@ func _register_game(data: Dictionary, from_ip: String) -> void:
 		"key": key,
 		"ip": ip,
 		"port": port,
-		"name": str(data.get("name", "Rankfall")),
+		"name": str(data.get("name", "Rankborn")),
 		"players": int(data.get("players", 1)),
 		"max_players": int(data.get("max_players", NetworkManager.MAX_CLIENTS)),
 		"last_seen": Time.get_ticks_msec() / 1000.0,

@@ -33,7 +33,7 @@ func host_game(port: int = DEFAULT_PORT) -> void:
 	is_host = true
 	players.clear()
 	players[1] = {"name": "Host"}
-	LanDiscovery.start_hosting(port, "Rankfall Lobby")
+	LanDiscovery.start_hosting(port, "Rankborn Lobby")
 	server_created.emit()
 	print("Server created on port %d" % port)
 

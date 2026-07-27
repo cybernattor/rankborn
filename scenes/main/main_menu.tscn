@@ -28,7 +28,7 @@ theme_override_constants/separation = 8
 
 [node name="Title" type="Label" parent="VBoxContainer"]
 layout_mode = 2
-text = "RANKFALL"
+text = "RANKBORN"
 horizontal_alignment = 1
 
 [node name="HostButton" type="Button" parent="VBoxContainer"]

@@ -137,7 +137,7 @@ func _on_games_updated(games: Array) -> void:
 	found_games_list.clear()
 	for game in _found_games:
 		var line := "%s  —  %s:%d  (%d/%d)" % [
-			str(game.get("name", "Rankfall")),
+			str(game.get("name", "Rankborn")),
 			str(game.get("ip", "?")),
 			int(game.get("port", 0)),
 			int(game.get("players", 0)),
