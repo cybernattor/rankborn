@@ -98,7 +98,7 @@ func _poll_packets() -> void:
 		var data = JSON.parse_string(text)
 		if typeof(data) != TYPE_DICTIONARY:
 			continue
-		if data.get("protocol", "") != PROTOCOL_ID:
+		if str(data.get("protocol", "")) != PROTOCOL_ID:
 			continue
 		var packet_type: String = str(data.get("type", ""))
 		if _mode == "host" and packet_type == "discover":
