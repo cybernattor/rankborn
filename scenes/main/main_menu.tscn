@@ -18,10 +18,10 @@ anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -180.0
-offset_top = -220.0
-offset_right = 180.0
-offset_bottom = 220.0
+offset_left = -200.0
+offset_top = -280.0
+offset_right = 200.0
+offset_bottom = 280.0
 grow_horizontal = 2
 grow_vertical = 2
 theme_override_constants/separation = 8
@@ -36,15 +36,32 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "Создать игру"
 
+[node name="FoundLabel" type="Label" parent="VBoxContainer"]
+layout_mode = 2
+text = "Игры в локальной сети"
+horizontal_alignment = 1
+
+[node name="FoundGamesList" type="ItemList" parent="VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(400, 110)
+allow_reselect = true
+
+[node name="JoinSelectedButton" type="Button" parent="VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+disabled = true
+text = "Подключиться к выбранной"
+
 [node name="JoinButton" type="Button" parent="VBoxContainer"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Присоединиться"
+text = "Присоединиться по IP"
 
 [node name="AddressInput" type="LineEdit" parent="VBoxContainer"]
 unique_name_in_owner = true
 layout_mode = 2
-placeholder_text = "IP хоста (127.0.0.1)"
+placeholder_text = "IP хоста (если не нашлась в списке)"
 
 [node name="PortInput" type="LineEdit" parent="VBoxContainer"]
 unique_name_in_owner = true
@@ -61,8 +78,9 @@ autowrap_mode = 2
 [node name="StatusLabel" type="Label" parent="VBoxContainer"]
 unique_name_in_owner = true
 layout_mode = 2
-text = ""
+text = "Поиск игр в локалке..."
 horizontal_alignment = 1
+autowrap_mode = 2
 
 [node name="StartButton" type="Button" parent="VBoxContainer"]
 unique_name_in_owner = true
@@ -74,4 +92,4 @@ text = "Начать матч"
 [node name="PlayerList" type="ItemList" parent="VBoxContainer"]
 unique_name_in_owner = true
 layout_mode = 2
-custom_minimum_size = Vector2(360, 140)
+custom_minimum_size = Vector2(400, 120)

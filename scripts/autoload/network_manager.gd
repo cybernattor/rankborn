@@ -33,11 +33,13 @@ func host_game(port: int = DEFAULT_PORT) -> void:
 	is_host = true
 	players.clear()
 	players[1] = {"name": "Host"}
+	LanDiscovery.start_hosting(port, "Rankfall Lobby")
 	server_created.emit()
 	print("Server created on port %d" % port)
 
 
 func join_game(address: String, port: int = DEFAULT_PORT) -> void:
+	LanDiscovery.stop()
 	peer = ENetMultiplayerPeer.new()
 	var err := peer.create_client(address, port)
 	if err != OK:
@@ -50,6 +52,7 @@ func join_game(address: String, port: int = DEFAULT_PORT) -> void:
 
 
 func disconnect_game() -> void:
+	LanDiscovery.stop()
 	if peer:
 		peer.close()
 		peer = null
@@ -81,6 +84,7 @@ func get_lan_ip() -> String:
 func start_match() -> void:
 	if not is_host:
 		return
+	LanDiscovery.stop()
 	_start_match.rpc()
 
 
