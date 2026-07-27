@@ -28,7 +28,7 @@ Strategy, FPS, RP in one time.
 ## Структура проекта
 
 ```
-Rankborn/
+rankborn/
 ├── project.godot
 ├── scenes/          # Сцены
 ├── scripts/         # Скрипты
