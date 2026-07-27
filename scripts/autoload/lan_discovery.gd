@@ -43,7 +43,7 @@ func start_browsing() -> void:
 	_mode = "browse"
 	_query_timer = QUERY_INTERVAL
 	_found.clear()
-	games_updated([])
+	games_updated.emit([])
 
 
 func start_hosting(game_port: int, game_name: String = "Rankborn") -> void:
