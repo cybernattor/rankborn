@@ -6,8 +6,19 @@
 [sub_resource type="PlaneMesh" id="PlaneMesh_ground"]
 size = Vector2(100, 100)
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ground"]
-albedo_color = Color(0.3, 0.5, 0.2, 1)
+[sub_resource type="Shader" id="Shader_grass"]
+code = "shader_type spatial;\nrender_mode blend_mix, depth_draw_opaque, cull_back;\n\nuniform vec4 grass_color_base : source_color = vec4(0.15, 0.42, 0.1, 1.0);\nuniform vec4 grass_color_tip : source_color = vec4(0.35, 0.65, 0.15, 1.0);\nuniform vec4 dirt_color : source_color = vec4(0.25, 0.18, 0.08, 1.0);\n\nuniform float grass_height : hint_range(0.0, 2.0) = 0.4;\nuniform float grass_density : hint_range(1.0, 100.0) = 40.0;\nuniform float blade_width : hint_range(0.01, 0.3) = 0.08;\nuniform float wind_strength : hint_range(0.0, 2.0) = 0.3;\nuniform float wind_speed : hint_range(0.0, 5.0) = 1.5;\n\nvarying float grass_blend;\n\nfloat hash(vec2 p) {\n\treturn fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);\n}\n\nfloat noise(vec2 p) {\n\tvec2 i = floor(p);\n\tvec2 f = fract(p);\n\tf = f * f * (3.0 - 2.0 * f);\n\tfloat a = hash(i);\n\tfloat b = hash(i + vec2(1.0, 0.0));\n\tfloat c = hash(i + vec2(0.0, 1.0));\n\tfloat d = hash(i + vec2(1.0, 1.0));\n\treturn mix(mix(a, b, f.x), mix(c, d, f.x), f.y);\n}\n\nvoid vertex() {\n\tfloat cell_x = floor(UV.x * grass_density);\n\tfloat cell_y = floor(UV.y * grass_density);\n\tvec2 cell = vec2(cell_x, cell_y);\n\n\tfloat r = hash(cell);\n\tvec2 offset = vec2(hash(cell + 0.1), hash(cell + 0.2)) - 0.5;\n\tvec2 local_uv = fract(UV * grass_density) - 0.5;\n\n\tfloat dist = length(local_uv - offset * blade_width);\n\tfloat blade = 1.0 - smoothstep(0.0, blade_width, dist);\n\n\tfloat height_var = 0.6 + 0.4 * hash(cell + 0.3);\n\tfloat h = grass_height * height_var * blade;\n\n\tfloat wind_offset = TIME * wind_speed + cell_x * 0.5 + cell_y * 0.3;\n\tfloat wind = sin(wind_offset) * wind_strength;\n\twind += sin(wind_offset * 2.3 + 1.7) * wind_strength * 0.4;\n\n\tfloat height_factor = UV.y;\n\tVERTEX.y += h * height_factor;\n\tVERTEX.x += wind * h * height_factor * height_factor;\n\n\tgrass_blend = blade * height_factor;\n}\n\nvoid fragment() {\n\tfloat n = noise(UV * grass_density * 0.5 + TIME * 0.02);\n\tfloat n2 = noise(UV * grass_density * 1.5 - TIME * 0.01);\n\n\tvec3 g_base = grass_color_base.rgb;\n\tvec3 g_tip = grass_color_tip.rgb;\n\tvec3 base_col = mix(g_base, g_tip, grass_blend);\n\n\tbase_col = mix(base_col, base_col * (0.85 + 0.3 * n), 0.4);\n\tbase_col = mix(base_col, base_col * (0.9 + 0.2 * n2), 0.3);\n\n\tbase_col = mix(dirt_color.rgb, base_col, smoothstep(0.0, 0.15, grass_blend));\n\n\tfloat ao = mix(0.5, 1.0, grass_blend);\n\tbase_col *= ao;\n\n\tALBEDO = base_col;\n\tROUGHNESS = 0.85;\n\tMETALLIC = 0.0;\n\tSPECULAR = 0.05;\n}\n"
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_ground"]
+shader = SubResource("Shader_grass")
+shader_parameter/grass_color_base = Color(0.15, 0.42, 0.1, 1)
+shader_parameter/grass_color_tip = Color(0.35, 0.65, 0.15, 1)
+shader_parameter/dirt_color = Color(0.25, 0.18, 0.08, 1)
+shader_parameter/grass_height = 0.4
+shader_parameter/grass_density = 40.0
+shader_parameter/blade_width = 0.08
+shader_parameter/wind_strength = 0.3
+shader_parameter/wind_speed = 1.5
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_ground"]
 size = Vector3(100, 1, 100)
@@ -23,7 +34,7 @@ shadow_enabled = true
 
 [node name="Ground" type="MeshInstance3D" parent="."]
 mesh = SubResource("PlaneMesh_ground")
-surface_material_override/0 = SubResource("StandardMaterial3D_ground")
+surface_material_override/0 = SubResource("ShaderMaterial_ground")
 
 [node name="GroundBody" type="StaticBody3D" parent="."]
 

@@ -61,7 +61,7 @@ func _spawn_player(id: int) -> void:
 func _get_spawn_position(id: int) -> Vector3:
 	if spawn_points.get_child_count() == 0:
 		return Vector3(0, 1, 0)
-	var spawn_index := abs(id) % spawn_points.get_child_count()
+	var spawn_index: int = absi(id) % spawn_points.get_child_count()
 	return spawn_points.get_child(spawn_index).global_position
 
 

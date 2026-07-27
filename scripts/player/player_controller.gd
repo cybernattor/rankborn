@@ -8,6 +8,8 @@ const RESPAWN_DELAY := 2.0
 @onready var head: Node3D = $Head
 @onready var camera: Camera3D = $Head/Camera3D
 @onready var body_mesh: MeshInstance3D = $MeshInstance3D
+@onready var left_arm: MeshInstance3D = $Head/LeftArm
+@onready var right_arm: MeshInstance3D = $Head/RightArm
 
 var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 var health: float = 100.0
@@ -27,8 +29,16 @@ func _ready() -> void:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 		if body_mesh:
 			body_mesh.visible = false
+		if left_arm:
+			left_arm.visible = true
+		if right_arm:
+			right_arm.visible = true
 	else:
 		camera.current = false
+		if left_arm:
+			left_arm.visible = false
+		if right_arm:
+			right_arm.visible = false
 
 
 func setup_spawn(pos: Vector3) -> void:
@@ -132,5 +142,10 @@ func _respawn() -> void:
 	velocity = Vector3.ZERO
 	global_position = spawn_position
 	visible = true
-	if is_multiplayer_authority() and body_mesh:
-		body_mesh.visible = false
+	if is_multiplayer_authority():
+		if body_mesh:
+			body_mesh.visible = false
+		if left_arm:
+			left_arm.visible = true
+		if right_arm:
+			right_arm.visible = true

@@ -14,6 +14,14 @@ height = 1.8
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_body"]
 albedo_color = Color(0.2, 0.35, 0.55, 1)
 
+[sub_resource type="CylinderMesh" id="CylinderMesh_arm"]
+top_radius = 0.04
+bottom_radius = 0.05
+height = 0.5
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_arm"]
+albedo_color = Color(0.72, 0.58, 0.48, 1)
+
 [sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_player"]
 properties/0/path = NodePath(".:position")
 properties/0/spawn = true
@@ -49,6 +57,16 @@ current = false
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.3, -0.2, -0.5)
 
 [node name="Rifle" parent="Head/WeaponPivot" instance=ExtResource("2")]
+
+[node name="LeftArm" type="MeshInstance3D" parent="Head"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.25, -0.4, -0.45)
+mesh = SubResource("CylinderMesh_arm")
+surface_material_override/0 = SubResource("StandardMaterial3D_arm")
+
+[node name="RightArm" type="MeshInstance3D" parent="Head"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.25, -0.4, -0.45)
+mesh = SubResource("CylinderMesh_arm")
+surface_material_override/0 = SubResource("StandardMaterial3D_arm")
 
 [node name="MultiplayerSynchronizer" type="MultiplayerSynchronizer" parent="."]
 replication_config = SubResource("SceneReplicationConfig_player")
