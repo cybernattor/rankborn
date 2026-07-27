@@ -77,7 +77,7 @@
 ## Структура проекта
 
 ```
-Rankborn/
+rankborn/
 ├── project.godot
 ├── scenes/
 │   ├── main/                  # Главное меню, лобби
