@@ -32,21 +32,22 @@ func _process(delta: float) -> void:
 		_expire_stale_games()
 
 
-func start_browsing() -> void:
+func start_browsing() -> Error:
 	stop()
 	_udp = PacketPeerUDP.new()
 	_udp.set_broadcast_enabled(true)
 	var err := _udp.bind(0)
 	if err != OK:
 		push_warning("LAN browse bind failed: %s" % error_string(err))
-		return
+		return err
 	_mode = "browse"
 	_query_timer = QUERY_INTERVAL
 	_found.clear()
 	games_updated.emit([])
+	return OK
 
 
-func start_hosting(game_port: int, game_name: String = "Rankborn") -> void:
+func start_hosting(game_port: int, game_name: String = "Rankborn") -> Error:
 	stop()
 	_game_port = game_port
 	_game_name = game_name
@@ -54,9 +55,10 @@ func start_hosting(game_port: int, game_name: String = "Rankborn") -> void:
 	var err := _udp.bind(DISCOVERY_PORT)
 	if err != OK:
 		push_warning("LAN host announce bind failed on %d: %s" % [DISCOVERY_PORT, error_string(err)])
-		return
+		return err
 	_mode = "host"
 	print("LAN discovery hosting on UDP %d" % DISCOVERY_PORT)
+	return OK
 
 
 func stop() -> void:

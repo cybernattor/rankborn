@@ -34,7 +34,9 @@ func host_game(port: int = DEFAULT_PORT) -> void:
 	is_host = true
 	players.clear()
 	players[1] = {"name": "Host"}
-	LanDiscovery.start_hosting(port, "Rankborn Lobby")
+	var discovery_err := LanDiscovery.start_hosting(port, "Rankborn Lobby")
+	if discovery_err != OK:
+		push_warning("LAN discovery unavailable — lobby won't be visible in browser")
 	server_created.emit()
 	print("Server created on port %d" % port)
 

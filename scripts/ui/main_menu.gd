@@ -34,7 +34,10 @@ func _ready() -> void:
 	start_button.visible = false
 	start_button.disabled = true
 	join_selected_button.disabled = true
-	LanDiscovery.start_browsing()
+	var browse_err := LanDiscovery.start_browsing()
+	if browse_err != OK:
+		status_label.text = "Ошибка сетевого поиска (порт заблокирован?)"
+		return
 	_on_games_updated(LanDiscovery.get_games())
 
 
@@ -94,8 +97,12 @@ func _on_server_created() -> void:
 	_in_lobby = true
 	var lan_ip := NetworkManager.get_lan_ip()
 	var port := int(port_input.text) if port_input.text != "" else NetworkManager.DEFAULT_PORT
-	ip_label.text = "Ваш IP: %s  |  порт %d\nДрузья увидят лобби в списке автоматически" % [lan_ip, port]
-	status_label.text = "Лобби открыто. Ждём игроков..."
+	if LanDiscovery._mode == "host":
+		ip_label.text = "Ваш IP: %s  |  порт %d\nДрузья увидят лобби в списке автоматически" % [lan_ip, port]
+		status_label.text = "Лобби открыто. Ждём игроков..."
+	else:
+		ip_label.text = "Ваш IP: %s  |  порт %d\nАвтообнаружение недоступно — подключайтесь вручную" % [lan_ip, port]
+		status_label.text = "Лобби открыто (без автопоиска). Ждём игроков..."
 	_set_connect_ui_enabled(false)
 	start_button.visible = true
 	start_button.disabled = false
@@ -112,9 +119,12 @@ func _on_connection_succeeded() -> void:
 
 func _on_connection_failed() -> void:
 	_in_lobby = false
-	status_label.text = "Ошибка подключения. Продолжаем поиск..."
 	_set_connect_ui_enabled(true)
-	LanDiscovery.start_browsing()
+	var browse_err := LanDiscovery.start_browsing()
+	if browse_err != OK:
+		status_label.text = "Ошибка подключения и сетевого поиска"
+	else:
+		status_label.text = "Ошибка подключения. Продолжаем поиск..."
 
 
 func _on_player_connected(_id: int) -> void:
