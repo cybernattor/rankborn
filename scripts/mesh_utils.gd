@@ -12,41 +12,19 @@ static func make_humanoid() -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 
-	var torso_size := Vector3(0.5, 0.55, 0.3)
-	var torso_pos := Vector3(0, 0.95, 0)
-	var torso_col := Color(0.22, 0.38, 0.58)
-	_add_box(st, torso_pos, torso_size, torso_col)
+	_add_box(st, Vector3(0, 0.95, 0), Vector3(0.5, 0.55, 0.3), Color(0.22, 0.38, 0.58))
+	_add_box(st, Vector3(0, 1.48, 0), Vector3(0.28, 0.28, 0.28), Color(0.82, 0.68, 0.55))
+	_add_box(st, Vector3(0, 1.6, 0), Vector3(0.32, 0.16, 0.32), Color(0.25, 0.32, 0.2))
+	_add_box(st, Vector3(-0.38, 0.9, 0), Vector3(0.14, 0.45, 0.14), Color(0.22, 0.38, 0.58))
+	_add_box(st, Vector3(0.38, 0.9, 0), Vector3(0.14, 0.45, 0.14), Color(0.22, 0.38, 0.58))
+	_add_box(st, Vector3(-0.38, 0.62, 0), Vector3(0.1, 0.12, 0.1), Color(0.82, 0.68, 0.55))
+	_add_box(st, Vector3(0.38, 0.62, 0), Vector3(0.1, 0.12, 0.1), Color(0.82, 0.68, 0.55))
+	_add_box(st, Vector3(-0.13, 0.42, 0), Vector3(0.16, 0.5, 0.16), Color(0.2, 0.28, 0.18))
+	_add_box(st, Vector3(0.13, 0.42, 0), Vector3(0.16, 0.5, 0.16), Color(0.2, 0.28, 0.18))
+	_add_box(st, Vector3(-0.13, 0.12, -0.02), Vector3(0.17, 0.14, 0.22), Color(0.18, 0.15, 0.12))
+	_add_box(st, Vector3(0.13, 0.12, -0.02), Vector3(0.17, 0.14, 0.22), Color(0.18, 0.15, 0.12))
 
-	var head_size := Vector3(0.28, 0.28, 0.28)
-	var head_pos := Vector3(0, 1.48, 0)
-	var head_col := Color(0.82, 0.68, 0.55)
-	_add_box(st, head_pos, head_size, head_col)
-
-	var helmet_size := Vector3(0.32, 0.16, 0.32)
-	var helmet_pos := Vector3(0, 1.6, 0)
-	var helmet_col := Color(0.25, 0.32, 0.2)
-	_add_box(st, helmet_pos, helmet_size, helmet_col)
-
-	var arm_size := Vector3(0.14, 0.45, 0.14)
-	var arm_col := Color(0.22, 0.38, 0.58)
-	_add_box(st, Vector3(-0.38, 0.9, 0), arm_size, arm_col)
-	_add_box(st, Vector3(0.38, 0.9, 0), arm_size, arm_col)
-
-	var hand_size := Vector3(0.1, 0.12, 0.1)
-	var hand_col := Color(0.82, 0.68, 0.55)
-	_add_box(st, Vector3(-0.38, 0.62, 0), hand_size, hand_col)
-	_add_box(st, Vector3(0.38, 0.62, 0), hand_size, hand_col)
-
-	var leg_size := Vector3(0.16, 0.5, 0.16)
-	var leg_col := Color(0.2, 0.28, 0.18)
-	_add_box(st, Vector3(-0.13, 0.42, 0), leg_size, leg_col)
-	_add_box(st, Vector3(0.13, 0.42, 0), leg_size, leg_col)
-
-	var boot_size := Vector3(0.17, 0.14, 0.22)
-	var boot_col := Color(0.18, 0.15, 0.12)
-	_add_box(st, Vector3(-0.13, 0.12, -0.02), boot_size, boot_col)
-	_add_box(st, Vector3(0.13, 0.12, -0.02), boot_size, boot_col)
-
+	st.generate_normals()
 	return st.commit()
 
 
@@ -65,15 +43,20 @@ static func make_rifle() -> ArrayMesh:
 	_add_box(st, Vector3(0, 0.03, -0.08), Vector3(0.025, 0.025, 0.06), metal)
 	_add_box(st, Vector3(0, 0, -0.52), Vector3(0.015, 0.035, 0.02), metal)
 
+	st.generate_normals()
 	return st.commit()
 
 
-static func make_terrain(size: float, resolution: int, height: float, seed_val: int) -> ArrayMesh:
+static func make_terrain(size: float, resolution: int, seed_val: int) -> ArrayMesh:
+	var noise := FastNoiseLite.new()
+	noise.seed = seed_val
+	noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+	noise.frequency = 0.008
+	noise.fractal_octaves = 4
+
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 
-	var rng := RandomNumberGenerator.new()
-	rng.seed = seed_val
 	var half := size / 2.0
 	var step := size / resolution
 
@@ -82,8 +65,14 @@ static func make_terrain(size: float, resolution: int, height: float, seed_val: 
 		for x in range(resolution + 1):
 			var px := -half + x * step
 			var pz := -half + z * step
-			var py := rng.randf_range(-height, height)
+			var py := noise.get_noise_2d(px, pz) * 6.0
 			verts.append(Vector3(px, py, pz))
+
+	var dirt := Color(0.45, 0.32, 0.18)
+	var grass_dark := Color(0.22, 0.40, 0.15)
+	var grass_mid := Color(0.30, 0.52, 0.18)
+	var grass_light := Color(0.42, 0.60, 0.25)
+	var rock := Color(0.45, 0.42, 0.38)
 
 	for z in range(resolution):
 		for x in range(resolution):
@@ -93,32 +82,47 @@ static func make_terrain(size: float, resolution: int, height: float, seed_val: 
 			var v2 := verts[i + resolution + 1]
 			var v3 := verts[i + resolution + 2]
 
-			var green := Color(
-				rng.randf_range(0.18, 0.38),
-				rng.randf_range(0.42, 0.62),
-				rng.randf_range(0.12, 0.22)
-			)
-			var green2 := Color(
-				rng.randf_range(0.15, 0.35),
-				rng.randf_range(0.38, 0.58),
-				rng.randf_range(0.1, 0.2)
-			)
+			var avg_h1 := (v0.y + v1.y + v2.y) / 3.0
+			var avg_h2 := (v1.y + v2.y + v3.y) / 3.0
+			var c1 := _terrain_color(avg_h1, dirt, grass_dark, grass_mid, grass_light, rock)
+			var c2 := _terrain_color(avg_h2, dirt, grass_dark, grass_mid, grass_light, rock)
 
-			st.set_color(green)
+			var n1 := (v1 - v0).cross(v2 - v0).normalized()
+			st.set_normal(n1)
+			st.set_color(c1)
 			st.add_vertex(v0)
-			st.set_color(green)
-			st.add_vertex(v2)
-			st.set_color(green)
+			st.set_normal(n1)
+			st.set_color(c1)
 			st.add_vertex(v1)
+			st.set_normal(n1)
+			st.set_color(c1)
+			st.add_vertex(v2)
 
-			st.set_color(green2)
+			var n2 := (v2 - v1).cross(v3 - v1).normalized()
+			st.set_normal(n2)
+			st.set_color(c2)
 			st.add_vertex(v1)
-			st.set_color(green2)
+			st.set_normal(n2)
+			st.set_color(c2)
 			st.add_vertex(v2)
-			st.set_color(green2)
+			st.set_normal(n2)
+			st.set_color(c2)
 			st.add_vertex(v3)
 
 	return st.commit()
+
+
+static func _terrain_color(h: float, dirt: Color, g_dark: Color, g_mid: Color, g_light: Color, rock: Color) -> Color:
+	if h < -2.0:
+		return dirt
+	elif h < 0.0:
+		return dirt.lerp(g_dark, (h + 2.0) / 2.0)
+	elif h < 1.5:
+		return g_dark.lerp(g_mid, h / 1.5)
+	elif h < 3.0:
+		return g_mid.lerp(g_light, (h - 1.5) / 1.5)
+	else:
+		return g_light.lerp(rock, clamp((h - 3.0) / 3.0, 0.0, 1.0))
 
 
 static func flat_material(color: Color, rough: float = 0.9) -> StandardMaterial3D:
@@ -126,6 +130,14 @@ static func flat_material(color: Color, rough: float = 0.9) -> StandardMaterial3
 	mat.albedo_color = color
 	mat.roughness = rough
 	mat.metallic = 0.0
+	mat.flat_shading = true
+	return mat
+
+
+static func terrain_material() -> StandardMaterial3D:
+	var mat := StandardMaterial3D.new()
+	mat.vertex_color_use_as_albedo = true
+	mat.roughness = 0.85
 	mat.flat_shading = true
 	return mat
 
