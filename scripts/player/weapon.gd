@@ -15,16 +15,25 @@ var is_reloading: bool = false
 @onready var raycast: RayCast3D = $RayCast3D
 @onready var muzzle_flash: GPUParticles3D = $MuzzleFlash
 @onready var reload_timer: Timer = $ReloadTimer
+var rifle_mesh: MeshInstance3D
 
 
 func _ready() -> void:
+	_build_lowpoly_rifle()
 	current_ammo = magazine_size
 	reload_timer.wait_time = reload_time
 	reload_timer.one_shot = true
 	reload_timer.timeout.connect(_on_reload_finished)
 	raycast.enabled = true
-	# Hit players on layer 2, world on layer 1.
 	raycast.collision_mask = 1 | 2
+
+
+func _build_lowpoly_rifle() -> void:
+	rifle_mesh = MeshInstance3D.new()
+	rifle_mesh.mesh = MeshUtils.make_rifle()
+	rifle_mesh.set_surface_override_material(0, MeshUtils.flat_material(Color(0.15, 0.15, 0.18)))
+	rifle_mesh.position = Vector3(0, 0, -0.25)
+	add_child(rifle_mesh)
 
 
 func _process(_delta: float) -> void:

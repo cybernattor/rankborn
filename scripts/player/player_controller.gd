@@ -7,9 +7,10 @@ const RESPAWN_DELAY := 2.0
 
 @onready var head: Node3D = $Head
 @onready var camera: Camera3D = $Head/Camera3D
-@onready var body_mesh: MeshInstance3D = $MeshInstance3D
-@onready var left_arm: MeshInstance3D = $Head/LeftArm
-@onready var right_arm: MeshInstance3D = $Head/RightArm
+
+var body_mesh: MeshInstance3D
+var left_arm: MeshInstance3D
+var right_arm: MeshInstance3D
 
 var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 var health: float = 100.0
@@ -24,21 +25,39 @@ var mobile_interact_triggered: bool = false
 
 
 func _ready() -> void:
+	_build_lowpoly_body()
 	if is_multiplayer_authority():
 		camera.current = true
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
-		if body_mesh:
-			body_mesh.visible = false
-		if left_arm:
-			left_arm.visible = true
-		if right_arm:
-			right_arm.visible = true
+		body_mesh.visible = false
+		left_arm.visible = true
+		right_arm.visible = true
 	else:
 		camera.current = false
-		if left_arm:
-			left_arm.visible = false
-		if right_arm:
-			right_arm.visible = false
+		left_arm.visible = false
+		right_arm.visible = false
+
+
+func _build_lowpoly_body() -> void:
+	var humanoid_mesh := MeshUtils.make_humanoid()
+	var mat := MeshUtils.flat_material(Color(0.22, 0.38, 0.58))
+
+	body_mesh = MeshInstance3D.new()
+	body_mesh.mesh = humanoid_mesh
+	body_mesh.set_surface_override_material(0, mat)
+	add_child(body_mesh)
+
+	left_arm = MeshInstance3D.new()
+	left_arm.mesh = MeshUtils.make_box(Vector3(0.14, 0.45, 0.14), Color(0.22, 0.38, 0.58))
+	left_arm.set_surface_override_material(0, MeshUtils.flat_material(Color(0.22, 0.38, 0.58)))
+	left_arm.position = Vector3(-0.38, 0.9, 0)
+	head.add_child(left_arm)
+
+	right_arm = MeshInstance3D.new()
+	right_arm.mesh = MeshUtils.make_box(Vector3(0.14, 0.45, 0.14), Color(0.22, 0.38, 0.58))
+	right_arm.set_surface_override_material(0, MeshUtils.flat_material(Color(0.22, 0.38, 0.58)))
+	right_arm.position = Vector3(0.38, 0.9, 0)
+	head.add_child(right_arm)
 
 
 func setup_spawn(pos: Vector3) -> void:

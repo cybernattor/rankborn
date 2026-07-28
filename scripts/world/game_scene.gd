@@ -10,17 +10,16 @@ var local_player_id: int = 1
 
 
 func _ready() -> void:
+	_build_lowpoly_terrain()
 	NetworkManager.player_connected.connect(_on_player_connected)
 	NetworkManager.player_disconnected.connect(_on_player_disconnected)
 
 	var my_id := multiplayer.get_unique_id()
 	local_player_id = my_id
 
-	# Spawn everyone already known (host + early joiners).
 	for id in NetworkManager.players.keys():
 		_spawn_player(id)
 
-	# Ensure local player exists even if the dict lagged.
 	if not players_node.has_node(str(my_id)):
 		_spawn_player(my_id)
 
@@ -30,6 +29,35 @@ func _ready() -> void:
 		mobile_ui.shoot_input.connect(_on_mobile_shoot)
 		mobile_ui.reload_input.connect(_on_mobile_reload)
 		mobile_ui.interact_input.connect(_on_mobile_interact)
+
+
+func _build_lowpoly_terrain() -> void:
+	var old_ground := get_node_or_null("Ground")
+	if old_ground:
+		old_ground.queue_free()
+
+	var terrain_mesh := MeshUtils.make_terrain(100.0, 30, 0.8, 42)
+	var terrain_instance := MeshInstance3D.new()
+	terrain_instance.mesh = terrain_mesh
+	terrain_instance.position = Vector3(0, -0.5, 0)
+	add_child(terrain_instance)
+
+	var ground_body := get_node_or_null("GroundBody")
+	if not ground_body:
+		ground_body = StaticBody3D.new()
+		ground_body.name = "GroundBody"
+		add_child(ground_body)
+
+	for child in ground_body.get_children():
+		if child is CollisionShape3D:
+			child.queue_free()
+
+	var col := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(100, 1, 100)
+	col.shape = box
+	col.position = Vector3(0, -0.5, 0)
+	ground_body.add_child(col)
 
 
 func _on_player_connected(id: int) -> void:
