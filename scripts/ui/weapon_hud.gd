@@ -27,7 +27,7 @@ func _process(_delta: float) -> void:
 	_update_ammo()
 	if _weapon.is_reloading and reload_bar:
 		reload_bar.visible = true
-		var elapsed := _weapon.reload_time - _weapon.reload_timer.time_left
+		var elapsed: float = _weapon.reload_time - _weapon.reload_timer.time_left
 		reload_bar.value = (elapsed / _weapon.reload_time) * 100.0
 	elif reload_bar:
 		reload_bar.visible = false
