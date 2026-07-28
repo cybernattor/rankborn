@@ -78,16 +78,6 @@ func shoot() -> void:
 	_base_transform = transform
 	translate(Vector3(0, 0, 0.06))
 	rotate_x(-0.02)
-	# Camera shake via head
-	var player := _get_player()
-	if player:
-		var head := player.get_node_or_null("Head")
-		if head:
-			var cam_shake := create_tween()
-			cam_shake.tween_property(head, "rotation:y", head.rotation.y + randf_range(-0.003, 0.003), 0.04)
-			cam_shake.parallel().tween_property(head, "rotation:x", head.rotation.x + randf_range(-0.005, 0.002), 0.04)
-			cam_shake.tween_property(head, "rotation:y", head.rotation.y, 0.15)
-			cam_shake.parallel().tween_property(head, "rotation:x", head.rotation.x, 0.15)
 	# Muzzle light flash
 	muzzle_light.light_energy = 2.5
 	get_tree().create_timer(0.06).timeout.connect(func():
