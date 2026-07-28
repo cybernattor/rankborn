@@ -42,9 +42,18 @@ func _process(_delta: float) -> void:
 	var player := _get_player()
 	if player and player.get("is_dead"):
 		return
-	if Input.is_action_pressed("shoot") and can_fire and not is_reloading:
+
+	var shoot_pressed := Input.is_action_pressed("shoot")
+	if player and player.get("mobile_shoot_pressed"):
+		shoot_pressed = true
+	if shoot_pressed and can_fire and not is_reloading:
 		shoot()
-	if Input.is_action_just_pressed("reload") and not is_reloading and current_ammo < magazine_size:
+
+	var reload_pressed := Input.is_action_just_pressed("reload")
+	if player and player.get("mobile_reload_triggered"):
+		reload_pressed = true
+		player.mobile_reload_triggered = false
+	if reload_pressed and not is_reloading and current_ammo < magazine_size:
 		reload()
 
 
