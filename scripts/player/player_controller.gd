@@ -24,9 +24,6 @@ var mobile_shoot_pressed: bool = false
 var mobile_reload_triggered: bool = false
 var mobile_interact_triggered: bool = false
 
-var _step_timer: float = 0.0
-var _step_interval: float = 0.4
-
 
 func _ready() -> void:
 	_build_lowpoly_body()
@@ -120,15 +117,6 @@ func _physics_process(delta: float) -> void:
 		velocity.x = move_toward(velocity.x, 0, SPEED)
 		velocity.z = move_toward(velocity.z, 0, SPEED)
 	move_and_slide()
-
-	# Footsteps
-	if is_on_floor() and direction:
-		_step_timer -= delta
-		if _step_timer <= 0.0:
-			SFXManager.play_step()
-			_step_timer = _step_interval
-	else:
-		_step_timer = 0.0
 
 
 func _get_input_vector() -> Vector2:
