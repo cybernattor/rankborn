@@ -171,6 +171,6 @@ func _respawn() -> void:
 		if body_mesh:
 			body_mesh.visible = false
 		if left_arm:
-			left_arm.visible = true
+			left_arm.visible = false
 		if right_arm:
-			right_arm.visible = true
+			right_arm.visible = false
