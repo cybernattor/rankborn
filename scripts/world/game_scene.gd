@@ -17,8 +17,13 @@ func _ready() -> void:
 	_terrain_noise.frequency = 0.008
 	_terrain_noise.fractal_octaves = 4
 
-	_setup_environment()
 	_build_lowpoly_terrain()
+
+	var sun := $DirectionalLight3D
+	sun.light_color = Color(1.0, 0.95, 0.85)
+	sun.light_energy = 1.5
+	sun.shadow_enabled = true
+	sun.rotation_degrees = Vector3(-50, 30, 0)
 	NetworkManager.player_connected.connect(_on_player_connected)
 	NetworkManager.player_disconnected.connect(_on_player_disconnected)
 
@@ -38,39 +43,6 @@ func _ready() -> void:
 		mobile_ui.reload_input.connect(_on_mobile_reload)
 		mobile_ui.interact_input.connect(_on_mobile_interact)
 
-
-func _setup_environment() -> void:
-	var env := Environment.new()
-	env.background_mode = Environment.BG_SKY
-	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color(0.35, 0.4, 0.45)
-	env.ambient_light_energy = 0.6
-	env.tonemap_mode = Environment.TONE_MAPPER_ACES
-	env.fog_enabled = true
-	env.fog_light_color = Color(0.7, 0.8, 0.9)
-	env.fog_density = 0.003
-	env.fog_sky_affect = 0.3
-
-	var sky_mat := ProceduralSkyMaterial.new()
-	sky_mat.sky_top_color = Color(0.3, 0.5, 0.85)
-	sky_mat.sky_horizon_color = Color(0.65, 0.75, 0.88)
-	sky_mat.ground_bottom_color = Color(0.2, 0.18, 0.15)
-	sky_mat.ground_horizon_color = Color(0.5, 0.55, 0.5)
-	sky_mat.sun_angle_max = 40.0
-	sky_mat.sun_curve = 0.15
-
-	var sky := Sky.new()
-	sky.sky_material = sky_mat
-	env.sky = sky
-
-	var world_env := $WorldEnvironment
-	world_env.environment = env
-
-	var sun := $DirectionalLight3D
-	sun.light_color = Color(1.0, 0.95, 0.85)
-	sun.light_energy = 1.5
-	sun.shadow_enabled = true
-	sun.rotation_degrees = Vector3(-50, 30, 0)
 
 
 func _build_lowpoly_terrain() -> void:
