@@ -78,7 +78,7 @@ def gen_empty():
         click = click / peak * 0.8
     return click
 
-out_dir = os.path.join(os.path.dirname(__file__), "assets", "audio")
+out_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "audio")
 os.makedirs(out_dir, exist_ok=True)
 
 save_wav(os.path.join(out_dir, "shoot.wav"), gen_shoot())
