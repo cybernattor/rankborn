@@ -7,9 +7,16 @@ extends Node3D
 
 var player_scene := preload("res://scenes/shared/player.tscn")
 var local_player_id: int = 1
+var _terrain_noise: FastNoiseLite
 
 
 func _ready() -> void:
+	_terrain_noise = FastNoiseLite.new()
+	_terrain_noise.seed = 42
+	_terrain_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+	_terrain_noise.frequency = 0.008
+	_terrain_noise.fractal_octaves = 4
+
 	_setup_environment()
 	_build_lowpoly_terrain()
 	NetworkManager.player_connected.connect(_on_player_connected)
@@ -34,22 +41,23 @@ func _ready() -> void:
 
 func _setup_environment() -> void:
 	var env := Environment.new()
-	env.background_mode = Environment.BG_COLOR
-	env.background_color = Color(0.55, 0.7, 0.85)
+	env.background_mode = Environment.BG_SKY
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color(0.6, 0.65, 0.7)
-	env.ambient_light_energy = 0.5
+	env.ambient_light_color = Color(0.35, 0.4, 0.45)
+	env.ambient_light_energy = 0.6
 	env.tonemap_mode = Environment.TONE_MAPPER_ACES
 	env.fog_enabled = true
-	env.fog_light_color = Color(0.6, 0.7, 0.8)
-	env.fog_density = 0.002
-	env.fog_sky_affect = 0.8
+	env.fog_light_color = Color(0.7, 0.8, 0.9)
+	env.fog_density = 0.003
+	env.fog_sky_affect = 0.3
 
 	var sky_mat := ProceduralSkyMaterial.new()
-	sky_mat.sky_top_color = Color(0.35, 0.55, 0.85)
-	sky_mat.sky_horizon_color = Color(0.65, 0.75, 0.85)
-	sky_mat.ground_bottom_color = Color(0.3, 0.25, 0.2)
-	sky_mat.ground_horizon_color = Color(0.6, 0.65, 0.6)
+	sky_mat.sky_top_color = Color(0.3, 0.5, 0.85)
+	sky_mat.sky_horizon_color = Color(0.65, 0.75, 0.88)
+	sky_mat.ground_bottom_color = Color(0.2, 0.18, 0.15)
+	sky_mat.ground_horizon_color = Color(0.5, 0.55, 0.5)
+	sky_mat.sun_angle_max = 40.0
+	sky_mat.sun_curve = 0.15
 
 	var sky := Sky.new()
 	sky.sky_material = sky_mat
@@ -60,9 +68,9 @@ func _setup_environment() -> void:
 
 	var sun := $DirectionalLight3D
 	sun.light_color = Color(1.0, 0.95, 0.85)
-	sun.light_energy = 1.2
+	sun.light_energy = 1.5
 	sun.shadow_enabled = true
-	sun.rotation_degrees = Vector3(-45, 30, 0)
+	sun.rotation_degrees = Vector3(-50, 30, 0)
 
 
 func _build_lowpoly_terrain() -> void:
@@ -83,10 +91,7 @@ func _build_lowpoly_terrain() -> void:
 			child.queue_free()
 
 	var col := CollisionShape3D.new()
-	var box := BoxShape3D.new()
-	box.size = Vector3(100, 20, 100)
-	col.shape = box
-	col.position = Vector3(0, -3, 0)
+	col.shape = terrain_mesh.create_trimesh_shape()
 	ground_body.add_child(col)
 
 
@@ -119,10 +124,11 @@ func _spawn_player(id: int) -> void:
 
 func _get_spawn_position(id: int) -> Vector3:
 	if spawn_points.get_child_count() == 0:
-		return Vector3(0, 10, 0)
+		return Vector3(0, 5, 0)
 	var spawn_index: int = absi(id) % spawn_points.get_child_count()
 	var pos: Vector3 = spawn_points.get_child(spawn_index).global_position as Vector3
-	pos.y = 10.0
+	var terrain_y := _terrain_noise.get_noise_2d(pos.x, pos.z) * 12.0
+	pos.y = terrain_y + 2.0
 	return pos
 
 

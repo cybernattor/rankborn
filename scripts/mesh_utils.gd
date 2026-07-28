@@ -65,14 +65,14 @@ static func make_terrain(size: float, resolution: int, seed_val: int) -> ArrayMe
 		for x in range(resolution + 1):
 			var px := -half + x * step
 			var pz := -half + z * step
-			var py := noise.get_noise_2d(px, pz) * 6.0
+			var py := noise.get_noise_2d(px, pz) * 12.0
 			verts.append(Vector3(px, py, pz))
 
-	var dirt := Color(0.45, 0.32, 0.18)
-	var grass_dark := Color(0.22, 0.40, 0.15)
-	var grass_mid := Color(0.30, 0.52, 0.18)
-	var grass_light := Color(0.42, 0.60, 0.25)
-	var rock := Color(0.45, 0.42, 0.38)
+	var dirt := Color(0.55, 0.38, 0.22)
+	var grass_dark := Color(0.25, 0.50, 0.18)
+	var grass_mid := Color(0.35, 0.62, 0.22)
+	var grass_light := Color(0.48, 0.72, 0.30)
+	var rock := Color(0.55, 0.52, 0.48)
 
 	for z in range(resolution):
 		for x in range(resolution):
@@ -87,42 +87,35 @@ static func make_terrain(size: float, resolution: int, seed_val: int) -> ArrayMe
 			var c1 := _terrain_color(avg_h1, dirt, grass_dark, grass_mid, grass_light, rock)
 			var c2 := _terrain_color(avg_h2, dirt, grass_dark, grass_mid, grass_light, rock)
 
-			var n1 := (v1 - v0).cross(v2 - v0).normalized()
-			st.set_normal(n1)
 			st.set_color(c1)
 			st.add_vertex(v0)
-			st.set_normal(n1)
 			st.set_color(c1)
 			st.add_vertex(v1)
-			st.set_normal(n1)
 			st.set_color(c1)
 			st.add_vertex(v2)
 
-			var n2 := (v2 - v1).cross(v3 - v1).normalized()
-			st.set_normal(n2)
 			st.set_color(c2)
 			st.add_vertex(v1)
-			st.set_normal(n2)
-			st.set_color(c2)
-			st.add_vertex(v2)
-			st.set_normal(n2)
 			st.set_color(c2)
 			st.add_vertex(v3)
+			st.set_color(c2)
+			st.add_vertex(v2)
 
+	st.generate_normals()
 	return st.commit()
 
 
 static func _terrain_color(h: float, dirt: Color, g_dark: Color, g_mid: Color, g_light: Color, rock: Color) -> Color:
-	if h < -2.0:
+	if h < -4.0:
 		return dirt
 	elif h < 0.0:
-		return dirt.lerp(g_dark, (h + 2.0) / 2.0)
-	elif h < 1.5:
-		return g_dark.lerp(g_mid, h / 1.5)
+		return dirt.lerp(g_dark, (h + 4.0) / 4.0)
 	elif h < 3.0:
-		return g_mid.lerp(g_light, (h - 1.5) / 1.5)
+		return g_dark.lerp(g_mid, h / 3.0)
+	elif h < 6.0:
+		return g_mid.lerp(g_light, (h - 3.0) / 3.0)
 	else:
-		return g_light.lerp(rock, clamp((h - 3.0) / 3.0, 0.0, 1.0))
+		return g_light.lerp(rock, clamp((h - 6.0) / 6.0, 0.0, 1.0))
 
 
 static func flat_material(color: Color, rough: float = 0.9) -> StandardMaterial3D:
