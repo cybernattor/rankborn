@@ -30,8 +30,10 @@ func _ready() -> void:
 		camera.current = true
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 		body_mesh.visible = false
-		left_arm.visible = true
-		right_arm.visible = true
+		if left_arm:
+			left_arm.visible = false
+		if right_arm:
+			right_arm.visible = false
 	else:
 		camera.current = false
 		left_arm.visible = false
@@ -50,14 +52,14 @@ func _build_lowpoly_body() -> void:
 	left_arm = MeshInstance3D.new()
 	left_arm.mesh = MeshUtils.make_box(Vector3(0.14, 0.45, 0.14), Color(0.22, 0.38, 0.58))
 	left_arm.set_surface_override_material(0, MeshUtils.flat_material(Color(0.22, 0.38, 0.58)))
-	left_arm.position = Vector3(-0.38, 0.9, 0)
-	head.add_child(left_arm)
+	left_arm.position = Vector3(-0.3, -0.3, -0.5)
+	camera.add_child(left_arm)
 
 	right_arm = MeshInstance3D.new()
 	right_arm.mesh = MeshUtils.make_box(Vector3(0.14, 0.45, 0.14), Color(0.22, 0.38, 0.58))
 	right_arm.set_surface_override_material(0, MeshUtils.flat_material(Color(0.22, 0.38, 0.58)))
-	right_arm.position = Vector3(0.38, 0.9, 0)
-	head.add_child(right_arm)
+	right_arm.position = Vector3(0.3, -0.3, -0.5)
+	camera.add_child(right_arm)
 
 
 func setup_spawn(pos: Vector3) -> void:

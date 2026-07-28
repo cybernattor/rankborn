@@ -1,6 +1,13 @@
-[gd_scene load_steps=2 format=3 uid="uid://mainmenu001"]
+[gd_scene load_steps=3 format=3 uid="uid://mainmenu001"]
 
 [ext_resource type="Script" path="res://scripts/ui/main_menu.gd" id="1"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_bg"]
+bg_color = Color(0.18, 0.22, 0.28, 0.95)
+corner_radius_top_left = 0
+corner_radius_top_right = 0
+corner_radius_bottom_right = 0
+corner_radius_bottom_left = 0
 
 [node name="MainMenu" type="Control"]
 layout_mode = 3
@@ -11,90 +18,95 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1")
 
-[node name="VBoxContainer" type="VBoxContainer" parent="."]
+[node name="Background" type="PanelContainer" parent="."]
 layout_mode = 1
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -200.0
-offset_top = -280.0
-offset_right = 200.0
-offset_bottom = 280.0
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_constants/separation = 8
+theme_override_constants/margin_left = 30
+theme_override_constants/margin_top = 30
+theme_override_constants/margin_right = 30
+theme_override_constants/margin_bottom = 30
+theme_override_styles/panel = SubResource("StyleBoxFlat_bg")
 
-[node name="Title" type="Label" parent="VBoxContainer"]
+[node name="VBoxContainer" type="VBoxContainer" parent="Background"]
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 1
+theme_override_constants/separation = 12
+
+[node name="Title" type="Label" parent="Background/VBoxContainer"]
 layout_mode = 2
 text = "RANKBORN"
 horizontal_alignment = 1
+theme_override_font_sizes/font_size = 52
 
-[node name="HostButton" type="Button" parent="VBoxContainer"]
+[node name="HostButton" type="Button" parent="Background/VBoxContainer"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Создать игру"
 
-[node name="FoundLabel" type="Label" parent="VBoxContainer"]
+[node name="FoundLabel" type="Label" parent="Background/VBoxContainer"]
 layout_mode = 2
 text = "Игры в локальной сети"
 horizontal_alignment = 1
 
-[node name="FoundGamesList" type="ItemList" parent="VBoxContainer"]
+[node name="FoundGamesList" type="ItemList" parent="Background/VBoxContainer"]
 unique_name_in_owner = true
 layout_mode = 2
-custom_minimum_size = Vector2(400, 110)
+custom_minimum_size = Vector2(600, 130)
 allow_reselect = true
 
-[node name="JoinSelectedButton" type="Button" parent="VBoxContainer"]
+[node name="JoinSelectedButton" type="Button" parent="Background/VBoxContainer"]
 unique_name_in_owner = true
 layout_mode = 2
 disabled = true
 text = "Подключиться к выбранной"
 
-[node name="JoinButton" type="Button" parent="VBoxContainer"]
+[node name="JoinButton" type="Button" parent="Background/VBoxContainer"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Присоединиться по IP"
 
-[node name="AddressInput" type="LineEdit" parent="VBoxContainer"]
+[node name="AddressInput" type="LineEdit" parent="Background/VBoxContainer"]
 unique_name_in_owner = true
 layout_mode = 2
 placeholder_text = "IP хоста (если не нашлась в списке)"
 
-[node name="PortInput" type="LineEdit" parent="VBoxContainer"]
+[node name="PortInput" type="LineEdit" parent="Background/VBoxContainer"]
 unique_name_in_owner = true
 layout_mode = 2
 placeholder_text = "7000"
 
-[node name="IpLabel" type="Label" parent="VBoxContainer"]
+[node name="IpLabel" type="Label" parent="Background/VBoxContainer"]
 unique_name_in_owner = true
 layout_mode = 2
 text = ""
 horizontal_alignment = 1
 autowrap_mode = 2
 
-[node name="StatusLabel" type="Label" parent="VBoxContainer"]
+[node name="StatusLabel" type="Label" parent="Background/VBoxContainer"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Поиск игр в локалке..."
 horizontal_alignment = 1
 autowrap_mode = 2
 
-[node name="StartButton" type="Button" parent="VBoxContainer"]
+[node name="StartButton" type="Button" parent="Background/VBoxContainer"]
 unique_name_in_owner = true
 layout_mode = 2
 disabled = true
 visible = false
 text = "Начать матч"
 
-[node name="PlayerList" type="ItemList" parent="VBoxContainer"]
+[node name="PlayerList" type="ItemList" parent="Background/VBoxContainer"]
 unique_name_in_owner = true
 layout_mode = 2
-custom_minimum_size = Vector2(400, 120)
+custom_minimum_size = Vector2(600, 140)
 
-[node name="ExitButton" type="Button" parent="VBoxContainer"]
+[node name="ExitButton" type="Button" parent="Background/VBoxContainer"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Выход"
