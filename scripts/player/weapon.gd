@@ -14,8 +14,12 @@ var is_reloading: bool = false
 
 @onready var raycast: RayCast3D = $RayCast3D
 @onready var muzzle_flash: GPUParticles3D = $MuzzleFlash
+@onready var muzzle_light: OmniLight3D = $MuzzleLight
 @onready var reload_timer: Timer = $ReloadTimer
 var rifle_mesh: MeshInstance3D
+
+var _base_transform: Transform3D
+var _recoil_recovery_speed := 12.0
 
 
 func _ready() -> void:
@@ -26,6 +30,8 @@ func _ready() -> void:
 	reload_timer.timeout.connect(_on_reload_finished)
 	raycast.enabled = true
 	raycast.collision_mask = 1 | 2
+	muzzle_light.light_energy = 0.0
+	_base_transform = transform
 
 
 func _build_lowpoly_rifle() -> void:
@@ -36,7 +42,7 @@ func _build_lowpoly_rifle() -> void:
 	add_child(rifle_mesh)
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if not is_multiplayer_authority():
 		return
 	var player := _get_player()
@@ -56,6 +62,9 @@ func _process(_delta: float) -> void:
 	if reload_pressed and not is_reloading and current_ammo < magazine_size:
 		reload()
 
+	# Smooth recoil recovery
+	transform = transform.interpolate_with(_base_transform, _recoil_recovery_speed * delta)
+
 
 func shoot() -> void:
 	if current_ammo <= 0:
@@ -63,6 +72,25 @@ func shoot() -> void:
 	current_ammo -= 1
 	can_fire = false
 	_shoot_effects.rpc()
+	# Recoil kick
+	_base_transform = transform
+	translate(Vector3(0, 0, 0.06))
+	rotate_x(-0.02)
+	# Camera shake via head
+	var player := _get_player()
+	if player:
+		var head := player.get_node_or_null("Head")
+		if head:
+			var cam_shake := create_tween()
+			cam_shake.tween_property(head, "rotation:y", head.rotation.y + randf_range(-0.003, 0.003), 0.04)
+			cam_shake.parallel().tween_property(head, "rotation:x", head.rotation.x + randf_range(-0.005, 0.002), 0.04)
+			cam_shake.tween_property(head, "rotation:y", head.rotation.y, 0.15)
+			cam_shake.parallel().tween_property(head, "rotation:x", head.rotation.x, 0.15)
+	# Muzzle light flash
+	muzzle_light.light_energy = 2.5
+	get_tree().create_timer(0.06).timeout.connect(func():
+		muzzle_light.light_energy = 0.0
+	)
 	if raycast.is_colliding():
 		var collider := raycast.get_collider()
 		if collider and collider.has_method("take_damage"):

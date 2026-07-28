@@ -11,6 +11,7 @@ const RESPAWN_DELAY := 2.0
 var body_mesh: MeshInstance3D
 var left_arm: MeshInstance3D
 var right_arm: MeshInstance3D
+var weapon_hud: CanvasLayer
 
 var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 var health: float = 100.0
@@ -34,6 +35,7 @@ func _ready() -> void:
 			left_arm.visible = false
 		if right_arm:
 			right_arm.visible = false
+		_setup_weapon_hud()
 	else:
 		camera.current = false
 		left_arm.visible = false
@@ -60,6 +62,18 @@ func _build_lowpoly_body() -> void:
 	right_arm.set_surface_override_material(0, MeshUtils.flat_material(Color(0.22, 0.38, 0.58)))
 	right_arm.position = Vector3(0.3, -0.3, -0.5)
 	camera.add_child(right_arm)
+
+
+func _setup_weapon_hud() -> void:
+	var hud_scene := preload("res://scenes/ui/weapon_hud.tscn")
+	weapon_hud = hud_scene.instantiate()
+	add_child(weapon_hud)
+	# Find weapon and connect HUD
+	var weapon_pivot := head.get_node_or_null("Camera3D/WeaponPivot")
+	if weapon_pivot:
+		var weapon := weapon_pivot.get_node_or_null("Rifle")
+		if weapon and weapon_hud.has_method("setup"):
+			weapon_hud.setup(weapon)
 
 
 func setup_spawn(pos: Vector3) -> void:
