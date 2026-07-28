@@ -78,6 +78,10 @@ func shoot() -> void:
 	_base_transform = transform
 	translate(Vector3(0, 0, 0.06))
 	rotate_x(-0.02)
+	# View recoil — pull aim up
+	var player := _get_player()
+	if player and player.has_method("apply_recoil"):
+		player.apply_recoil(randf_range(0.015, 0.03))
 	# Muzzle light flash
 	muzzle_light.light_energy = 2.5
 	get_tree().create_timer(0.06).timeout.connect(func():

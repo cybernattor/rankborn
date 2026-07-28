@@ -24,6 +24,9 @@ var mobile_shoot_pressed: bool = false
 var mobile_reload_triggered: bool = false
 var mobile_interact_triggered: bool = false
 
+var _recoil_x: float = 0.0
+var _recoil_recovery := 8.0
+
 
 func _ready() -> void:
 	_build_lowpoly_body()
@@ -81,6 +84,10 @@ func setup_spawn(pos: Vector3) -> void:
 	global_position = pos
 
 
+func apply_recoil(amount: float) -> void:
+	_recoil_x += amount
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if not is_multiplayer_authority() or is_dead:
 		return
@@ -117,6 +124,15 @@ func _physics_process(delta: float) -> void:
 		velocity.x = move_toward(velocity.x, 0, SPEED)
 		velocity.z = move_toward(velocity.z, 0, SPEED)
 	move_and_slide()
+
+	# Recoil recovery
+	if _recoil_x != 0.0:
+		var step := _recoil_x * _recoil_recovery * delta
+		head.rotation.x -= step
+		head.rotation.x = clamp(head.rotation.x, -PI / 2, PI / 2)
+		_recoil_x -= step
+		if abs(_recoil_x) < 0.0001:
+			_recoil_x = 0.0
 
 
 func _get_input_vector() -> Vector2:
