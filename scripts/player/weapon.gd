@@ -68,9 +68,11 @@ func _process(delta: float) -> void:
 
 func shoot() -> void:
 	if current_ammo <= 0:
+		SFXManager.play_empty()
 		return
 	current_ammo -= 1
 	can_fire = false
+	SFXManager.play_shoot()
 	_shoot_effects.rpc()
 	# Recoil kick
 	_base_transform = transform
@@ -94,6 +96,7 @@ func shoot() -> void:
 	if raycast.is_colliding():
 		var collider := raycast.get_collider()
 		if collider and collider.has_method("take_damage"):
+			SFXManager.play_hit()
 			collider.take_damage.rpc_id(collider.get_multiplayer_authority(), damage)
 	fired.emit()
 	await get_tree().create_timer(fire_rate).timeout
@@ -102,6 +105,7 @@ func shoot() -> void:
 
 func reload() -> void:
 	is_reloading = true
+	SFXManager.play_reload()
 	reload_timer.start()
 
 
