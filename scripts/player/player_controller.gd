@@ -128,7 +128,7 @@ func _physics_process(delta: float) -> void:
 	# Recoil recovery
 	if _recoil_x != 0.0:
 		var step := _recoil_x * _recoil_recovery * delta
-		head.rotation.x += step
+		head.rotation.x -= step
 		head.rotation.x = clamp(head.rotation.x, -PI / 2, PI / 2)
 		_recoil_x -= step
 		if abs(_recoil_x) < 0.0001:
