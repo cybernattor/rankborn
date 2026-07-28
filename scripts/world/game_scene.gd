@@ -84,6 +84,7 @@ func _spawn_player(id: int) -> void:
 	player.name = str(id)
 	players_node.add_child(player, true)
 	player.set_multiplayer_authority(id)
+	_propagate_authority(player, id)
 
 	var spawn_pos := _get_spawn_position(id)
 	player.global_position = spawn_pos
@@ -130,3 +131,9 @@ func _set_input_state(action: String, value) -> void:
 	var player = players_node.get_node(str(local_player_id))
 	if player.has_method("_on_mobile_input"):
 		player._on_mobile_input(action, value)
+
+
+func _propagate_authority(node: Node, authority_id: int) -> void:
+	for child in node.get_children():
+		child.set_multiplayer_authority(authority_id)
+		_propagate_authority(child, authority_id)
