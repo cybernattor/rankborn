@@ -1,9 +1,13 @@
 extends Node3D
 
+## Корневая сцена игры. Управляет спавном игроков, террейном,
+## MobileUI и делегирует правила GameMode.
+
 @onready var players_node: Node3D = $Players
 @onready var spawn_points: Node3D = $SpawnPoints
 @onready var mobile_ui: Control = $MobileUI
 @onready var pause_menu: Control = $PauseMenu
+@onready var game_mode: GameMode = $GameMode
 
 var player_scene := preload("res://scenes/shared/player.tscn")
 var local_player_id: int = 1
@@ -24,25 +28,27 @@ func _ready() -> void:
 	sun.light_energy = 1.5
 	sun.shadow_enabled = true
 	sun.rotation_degrees = Vector3(-50, 30, 0)
+
 	NetworkManager.player_connected.connect(_on_player_connected)
 	NetworkManager.player_disconnected.connect(_on_player_disconnected)
 
 	var my_id := multiplayer.get_unique_id()
 	local_player_id = my_id
 
+	# Спавним всех уже подключённых игроков
 	for id in NetworkManager.players.keys():
 		_spawn_player(id)
 
 	if not players_node.has_node(str(my_id)):
 		_spawn_player(my_id)
 
+	# Mobile UI: подключаем сигналы
 	if mobile_ui and mobile_ui.visible:
 		mobile_ui.move_input.connect(_on_mobile_move)
 		mobile_ui.look_input.connect(_on_mobile_look)
 		mobile_ui.shoot_input.connect(_on_mobile_shoot)
 		mobile_ui.reload_input.connect(_on_mobile_reload)
 		mobile_ui.interact_input.connect(_on_mobile_interact)
-
 
 
 func _build_lowpoly_terrain() -> void:
@@ -94,6 +100,10 @@ func _spawn_player(id: int) -> void:
 	if id == multiplayer.get_unique_id():
 		local_player_id = id
 
+	# Уведомляем GameMode
+	if game_mode:
+		game_mode.on_player_spawn(id)
+
 
 func _get_spawn_position(id: int) -> Vector3:
 	if spawn_points.get_child_count() == 0:
@@ -104,6 +114,8 @@ func _get_spawn_position(id: int) -> Vector3:
 	pos.y = terrain_y + 2.0
 	return pos
 
+
+# --- Mobile input routing ---
 
 func _on_mobile_move(vec: Vector2) -> void:
 	_set_input_state("mobile_move", vec)

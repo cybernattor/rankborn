@@ -1,0 +1,46 @@
+[gd_scene load_steps=5 format=3 uid="uid://cq6ea0qkx74pr"]
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_env"]
+sky_top_color = Color(0.95, 0.55, 0.35, 1)
+sky_horizon_color = Color(0.85, 0.65, 0.55, 1)
+sky_curve = 0.3
+ground_bottom_color = Color(0.15, 0.1, 0.08, 1)
+ground_horizon_color = Color(0.65, 0.5, 0.4, 1)
+sun_angle_max = 90.0
+
+[sub_resource type="Sky" id="Sky_env"]
+sky_material = SubResource("ProceduralSkyMaterial_env")
+
+[sub_resource type="Environment" id="Environment_env"]
+background_mode = 2
+sky = SubResource("Sky_env")
+ambient_light_source = 2
+ambient_light_color = Color(0.35, 0.25, 0.3, 1)
+ambient_light_energy = 0.4
+tonemap_mode = 3
+tonemap_exposure = 0.8
+glow_enabled = true
+glow_intensity = 0.15
+glow_strength = 0.8
+glow_blend_mode = 1
+glow_hdr_threshold = 1.5
+glow_levels/0 = true
+glow_levels/1 = false
+glow_levels/2 = false
+glow_levels/3 = false
+glow_levels/4 = false
+glow_levels/5 = false
+glow_levels/6 = false
+glow_levels/7 = false
+fog_light_color = Color(0.85, 0.65, 0.55, 1)
+fog_density = 0.003
+
+[sub_resource type="CameraAttributesPractical" id="CameraAttributes_env"]
+exposure_sensitivity = 200
+auto_exposure_enabled = false
+exposure_aperture = 8.0
+exposure_shutter_speed = 0.01
+
+[node name="Environment" type="WorldEnvironment"]
+environment = SubResource("Environment_env")
+camera_attributes = SubResource("CameraAttributes_env")

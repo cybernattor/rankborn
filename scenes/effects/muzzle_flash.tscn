@@ -1,0 +1,24 @@
+[gd_scene load_steps=3 format=3 uid="uid://dr0eb5o1h43po"]
+
+[sub_resource type="ParticleProcessMaterial" id="ParticleProcessMaterial_muzzle"]
+direction = Vector3(0, 0, -1)
+spread = 10.0
+initial_velocity_min = 8.0
+initial_velocity_max = 12.0
+gravity = Vector3(0, 0, 0)
+scale_min = 0.8
+scale_max = 1.2
+color = Color(1, 0.85, 0.4, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_particle"]
+size = Vector3(0.05, 0.05, 0.05)
+
+[node name="MuzzleFlash" type="GpuParticles3D"]
+emitting = false
+amount = 6
+lifetime = 0.06
+one_shot = true
+explosiveness = 1.0
+visibility_aabb = AABB(-0.5, -0.5, -0.5, 1, 1, 1)
+process_material = SubResource("ParticleProcessMaterial_muzzle")
+draw_pass_1 = SubResource("BoxMesh_particle")

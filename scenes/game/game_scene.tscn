@@ -1,11 +1,10 @@
-[gd_scene load_steps=4 format=3 uid="uid://gamescene001"]
+[gd_scene format=3 uid="uid://gamescene001"]
 
-[ext_resource type="Script" path="res://scripts/world/game_scene.gd" id="1"]
-[ext_resource type="PackedScene" path="res://scenes/ui/mobile_ui.tscn" id="2"]
-[ext_resource type="PackedScene" path="res://scenes/ui/pause_menu.tscn" id="3"]
-
-[sub_resource type="BoxShape3D" id="BoxShape3D_ground"]
-size = Vector3(100, 20, 100)
+[ext_resource type="Script" uid="uid://cu2vu0fmbbvs3" path="res://scripts/world/game_scene.gd" id="1"]
+[ext_resource type="PackedScene" uid="uid://mobileui001" path="res://scenes/ui/mobile_ui.tscn" id="2"]
+[ext_resource type="PackedScene" uid="uid://pausemenu001" path="res://scenes/ui/pause_menu.tscn" id="3"]
+[ext_resource type="Script" uid="uid://c1fqwujcwsjep" path="res://scripts/world/kill_zone.gd" id="4_6hqhf"]
+[ext_resource type="Script" uid="uid://dhievnin3l0ru" path="res://scripts/game_modes/deathmatch_mode.gd" id="5_p0de3"]
 
 [sub_resource type="ProceduralSkyMaterial" id="SkyMat"]
 sky_top_color = Color(0.36, 0.55, 0.82, 1)
@@ -16,59 +15,105 @@ ground_horizon_color = Color(0.65, 0.75, 0.85, 1)
 [sub_resource type="Sky" id="Sky_main"]
 sky_material = SubResource("SkyMat")
 
-[sub_resource type="CameraAttributesPractical" id="CameraAttr"]
-dof_blur_near_distance = 2.0
-dof_blur_far_distance = 100.0
-
 [sub_resource type="Environment" id="Env_main"]
 background_mode = 2
 sky = SubResource("Sky_main")
-tonemap_mode = 4
 ambient_light_source = 2
 ambient_light_color = Color(0.3, 0.3, 0.35, 1)
 ambient_light_energy = 0.5
+tonemap_mode = 4
 fog_light_color = Color(0.65, 0.75, 0.85, 1)
 fog_density = 0.005
-volumetric_fog_enabled = false
-camera_attributes = SubResource("CameraAttr")
 
-[node name="GameScene" type="Node3D"]
+[sub_resource type="BoxShape3D" id="BoxShape3D_ground"]
+size = Vector3(100, 20, 100)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_kill"]
+size = Vector3(200, 2, 200)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_wall_z"]
+size = Vector3(110, 40, 2)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_wall_x"]
+size = Vector3(2, 40, 110)
+
+[node name="GameScene" type="Node3D" unique_id=177144088]
 script = ExtResource("1")
 
-[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=814060104]
 environment = SubResource("Env_main")
 
-[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=2092278653]
 transform = Transform3D(1, 0, 0, 0, 0.707107, 0.707107, 0, -0.707107, 0.707107, 0, 10, 0)
 shadow_enabled = true
 
-[node name="GroundBody" type="StaticBody3D" parent="."]
+[node name="GroundBody" type="StaticBody3D" parent="." unique_id=1825113920]
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="GroundBody"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="GroundBody" unique_id=1742770762]
 shape = SubResource("BoxShape3D_ground")
 
-[node name="Players" type="Node3D" parent="."]
+[node name="Players" type="Node3D" parent="." unique_id=1880964014]
 
-[node name="MobileUI" parent="." instance=ExtResource("2")]
+[node name="MobileUI" parent="." unique_id=23906443 instance=ExtResource("2")]
 
-[node name="PauseMenu" parent="." instance=ExtResource("3")]
+[node name="PauseMenu" parent="." unique_id=498414101 instance=ExtResource("3")]
 
-[node name="SpawnPoints" type="Node3D" parent="."]
+[node name="SpawnPoints" type="Node3D" parent="." unique_id=217323524]
 
-[node name="Spawn1" type="Marker3D" parent="SpawnPoints"]
+[node name="Spawn1" type="Marker3D" parent="SpawnPoints" unique_id=1978862450]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -20, 10, -20)
 
-[node name="Spawn2" type="Marker3D" parent="SpawnPoints"]
+[node name="Spawn2" type="Marker3D" parent="SpawnPoints" unique_id=1421825208]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 20, 10, -20)
 
-[node name="Spawn3" type="Marker3D" parent="SpawnPoints"]
+[node name="Spawn3" type="Marker3D" parent="SpawnPoints" unique_id=737620271]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -20, 10, 20)
 
-[node name="Spawn4" type="Marker3D" parent="SpawnPoints"]
+[node name="Spawn4" type="Marker3D" parent="SpawnPoints" unique_id=2043400823]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 20, 10, 20)
 
-[node name="Spawn5" type="Marker3D" parent="SpawnPoints"]
+[node name="Spawn5" type="Marker3D" parent="SpawnPoints" unique_id=314599427]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 10, -30)
 
-[node name="Spawn6" type="Marker3D" parent="SpawnPoints"]
+[node name="Spawn6" type="Marker3D" parent="SpawnPoints" unique_id=806687925]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 10, 30)
+
+[node name="KillZone" type="Area3D" parent="." unique_id=1080955902]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -20, 0)
+script = ExtResource("4_6hqhf")
+
+[node name="KillShape" type="CollisionShape3D" parent="KillZone" unique_id=1447315701]
+shape = SubResource("BoxShape3D_kill")
+
+[node name="Boundaries" type="Node3D" parent="." unique_id=1099118386]
+
+[node name="WallNorth" type="StaticBody3D" parent="Boundaries" unique_id=651227614]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 10, -55)
+collision_layer = 0
+
+[node name="Shape" type="CollisionShape3D" parent="Boundaries/WallNorth" unique_id=1845833788]
+shape = SubResource("BoxShape3D_wall_z")
+
+[node name="WallSouth" type="StaticBody3D" parent="Boundaries" unique_id=1848871974]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 10, 55)
+collision_layer = 0
+
+[node name="Shape" type="CollisionShape3D" parent="Boundaries/WallSouth" unique_id=249971729]
+shape = SubResource("BoxShape3D_wall_z")
+
+[node name="WallWest" type="StaticBody3D" parent="Boundaries" unique_id=2036410878]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -55, 10, 0)
+collision_layer = 0
+
+[node name="Shape" type="CollisionShape3D" parent="Boundaries/WallWest" unique_id=113095929]
+shape = SubResource("BoxShape3D_wall_x")
+
+[node name="WallEast" type="StaticBody3D" parent="Boundaries" unique_id=663681674]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 55, 10, 0)
+collision_layer = 0
+
+[node name="Shape" type="CollisionShape3D" parent="Boundaries/WallEast" unique_id=362588985]
+shape = SubResource("BoxShape3D_wall_x")
+
+[node name="GameMode" type="Node" parent="." unique_id=1252560308]
+script = ExtResource("5_p0de3")
