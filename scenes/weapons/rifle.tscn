@@ -1,10 +1,10 @@
-[gd_scene load_steps=4 format=3 uid="uid://rifle001"]
+[gd_scene format=3 uid="uid://rifle001"]
 
-[ext_resource type="Script" path="res://scripts/player/weapon.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/weapons/rifle.gd" id="1"]
 
 [sub_resource type="ParticleProcessMaterial" id="ParticleProcessMaterial_muzzle"]
 direction = Vector3(0, 0, -1)
-spread = 15.0
+spread = 10.0
 initial_velocity_min = 8.0
 initial_velocity_max = 12.0
 gravity = Vector3(0, 0, 0)
@@ -15,32 +15,30 @@ color = Color(1, 0.85, 0.4, 1)
 [sub_resource type="BoxMesh" id="BoxMesh_particle"]
 size = Vector3(0.05, 0.05, 0.05)
 
-[node name="Rifle" type="Node3D"]
+[node name="Rifle" type="Node3D" unique_id=873633041]
 script = ExtResource("1")
 
-[node name="RayCast3D" type="RayCast3D" parent="."]
+[node name="RayCast3D" type="RayCast3D" parent="." unique_id=196253885]
 target_position = Vector3(0, 0, -100)
-collide_with_areas = false
-collide_with_bodies = true
 
-[node name="MuzzleFlash" type="GPUParticles3D" parent="."]
+[node name="MuzzleFlash" type="GPUParticles3D" parent="." unique_id=1539696234]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.55)
 emitting = false
-amount = 8
-lifetime = 0.1
+amount = 6
+lifetime = 0.06
 one_shot = true
 explosiveness = 1.0
 visibility_aabb = AABB(-0.5, -0.5, -0.5, 1, 1, 1)
 process_material = SubResource("ParticleProcessMaterial_muzzle")
 draw_pass_1 = SubResource("BoxMesh_particle")
 
-[node name="MuzzleLight" type="OmniLight3D" parent="."]
+[node name="MuzzleLight" type="OmniLight3D" parent="." unique_id=1902246483]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.6)
 light_color = Color(1, 0.8, 0.4, 1)
 light_energy = 0.0
-omni_range = 4.0
+omni_range = 3.0
 omni_attenuation = 2.0
 
-[node name="ReloadTimer" type="Timer" parent="."]
+[node name="ReloadTimer" type="Timer" parent="." unique_id=207520385]
 wait_time = 2.0
 one_shot = true

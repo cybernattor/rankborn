@@ -1,0 +1,20 @@
+[gd_scene format=3 uid="uid://dkaojp31lamuu"]
+
+[ext_resource type="Script" uid="uid://d1ejpwcakau0n" path="res://scripts/player/damage_screen_effects.gd" id="1_swafv"]
+
+[node name="DamageScreenEffects" type="CanvasLayer" unique_id=906252035]
+script = ExtResource("1_swafv")
+
+[node name="HitVignette" type="ColorRect" parent="." unique_id=1683391918]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+color = Color(0, 0, 0, 0)
+
+[node name="KillFlash" type="ColorRect" parent="." unique_id=1628297497]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+color = Color(1, 0, 0, 0)

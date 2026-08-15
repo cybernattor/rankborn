@@ -15,8 +15,30 @@ extends Control
 var _found_games: Array = []
 var _in_lobby: bool = false
 
+# Adaptive layout references
+var _columns_hbox: HBoxContainer
+var _columns_vbox: VBoxContainer
+var _create_section: PanelContainer
+var _join_section: PanelContainer
+var _main_vbox: VBoxContainer
+var _is_mobile: bool = false
+const MOBILE_WIDTH_THRESHOLD := 768.0
+
 
 func _ready() -> void:
+	_columns_hbox = $Background/Margin/MainVBox/ColumnsHBox
+	_main_vbox = $Background/Margin/MainVBox
+	_create_section = $Background/Margin/MainVBox/ColumnsHBox/CreateSection
+	_join_section = $Background/Margin/MainVBox/ColumnsHBox/JoinSection
+
+	# Create a VBox container for mobile layout (hidden by default)
+	_columns_vbox = VBoxContainer.new()
+	_columns_vbox.name = "ColumnsVBox"
+	_columns_vbox.visible = false
+	_main_vbox.add_child(_columns_vbox)
+	_columns_vbox.add_theme_constant_override("separation", 12)
+
+	# Connect signals
 	host_button.pressed.connect(_on_host_pressed)
 	join_button.pressed.connect(_on_join_pressed)
 	join_selected_button.pressed.connect(_on_join_selected_pressed)
@@ -34,6 +56,12 @@ func _ready() -> void:
 	start_button.visible = false
 	start_button.disabled = true
 	join_selected_button.disabled = true
+
+	# Handle adaptive layout
+	_handle_resize()
+	get_viewport().size_changed.connect(_handle_resize)
+
+	# Start LAN discovery
 	var browse_err := LanDiscovery.start_browsing()
 	if browse_err != OK:
 		status_label.text = "Ошибка сетевого поиска (порт заблокирован?)"
@@ -44,6 +72,47 @@ func _ready() -> void:
 func _exit_tree() -> void:
 	if not _in_lobby:
 		LanDiscovery.stop()
+
+
+func _handle_resize() -> void:
+	var viewport_size := get_viewport_rect().size
+	var should_be_mobile := viewport_size.x < MOBILE_WIDTH_THRESHOLD
+
+	if should_be_mobile == _is_mobile:
+		return
+
+	_is_mobile = should_be_mobile
+	_apply_layout()
+
+
+func _apply_layout() -> void:
+	if _is_mobile:
+		# Move sections to VBox for vertical stacking
+		if _create_section.get_parent() == _columns_hbox:
+			_columns_hbox.remove_child(_create_section)
+		if _join_section.get_parent() == _columns_hbox:
+			_columns_hbox.remove_child(_join_section)
+		if _create_section.get_parent() != _columns_vbox:
+			_columns_vbox.add_child(_create_section)
+		if _join_section.get_parent() != _columns_vbox:
+			_columns_vbox.add_child(_join_section)
+		_columns_hbox.visible = false
+		_columns_vbox.visible = true
+		# Full width on mobile
+		_create_section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		_join_section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	else:
+		# Move sections back to HBox for side-by-side
+		if _create_section.get_parent() == _columns_vbox:
+			_columns_vbox.remove_child(_create_section)
+		if _join_section.get_parent() == _columns_vbox:
+			_columns_vbox.remove_child(_join_section)
+		if _create_section.get_parent() != _columns_hbox:
+			_columns_hbox.add_child(_create_section)
+		if _join_section.get_parent() != _columns_hbox:
+			_columns_hbox.add_child(_join_section)
+		_columns_vbox.visible = false
+		_columns_hbox.visible = true
 
 
 func _on_host_pressed() -> void:
@@ -98,11 +167,11 @@ func _on_server_created() -> void:
 	var lan_ip := NetworkManager.get_lan_ip()
 	var port := int(port_input.text) if port_input.text != "" else NetworkManager.DEFAULT_PORT
 	if LanDiscovery._mode == "host":
-		ip_label.text = "Ваш IP: %s  |  порт %d\nДрузья увидят лобби в списке автоматически" % [lan_ip, port]
+		ip_label.text = "IP: %s:%d\nДрузья увидят лобби автоматически" % [lan_ip, port]
 		status_label.text = "Лобби открыто. Ждём игроков..."
 	else:
-		ip_label.text = "Ваш IP: %s  |  порт %d\nАвтообнаружение недоступно — подключайтесь вручную" % [lan_ip, port]
-		status_label.text = "Лобби открыто (без автопоиска). Ждём игроков..."
+		ip_label.text = "IP: %s:%d\nАвтообнаружение недоступно" % [lan_ip, port]
+		status_label.text = "Лобби открыто (без автопоиска)..."
 	_set_connect_ui_enabled(false)
 	start_button.visible = true
 	start_button.disabled = false
@@ -167,7 +236,7 @@ func _on_games_updated(games: Array) -> void:
 		if _found_games.is_empty():
 			status_label.text = "Поиск игр в локалке..."
 		else:
-			status_label.text = "Найдено игр: %d (двойной клик = войти)" % _found_games.size()
+			status_label.text = "Найдено: %d (двойной клик = войти)" % _found_games.size()
 		join_selected_button.disabled = found_games_list.get_selected_items().is_empty()
 
 

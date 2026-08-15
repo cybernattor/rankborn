@@ -1,9 +1,20 @@
-[gd_scene load_steps=3 format=3 uid="uid://mainmenu001"]
+[gd_scene load_steps=4 format=3 uid="uid://mainmenu001"]
 
 [ext_resource type="Script" path="res://scripts/ui/main_menu.gd" id="1"]
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_section"]
+bg_color = Color(0.15, 0.18, 0.24, 0.85)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
+content_margin_left = 18.0
+content_margin_top = 18.0
+content_margin_right = 18.0
+content_margin_bottom = 18.0
+
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_bg"]
-bg_color = Color(0.18, 0.22, 0.28, 0.95)
+bg_color = Color(0.1, 0.12, 0.16, 1.0)
 corner_radius_top_left = 0
 corner_radius_top_right = 0
 corner_radius_bottom_right = 0
@@ -25,88 +36,178 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_constants/margin_left = 30
-theme_override_constants/margin_top = 30
-theme_override_constants/margin_right = 30
-theme_override_constants/margin_bottom = 30
 theme_override_styles/panel = SubResource("StyleBoxFlat_bg")
 
-[node name="VBoxContainer" type="VBoxContainer" parent="Background"]
+[node name="Margin" type="MarginContainer" parent="Background"]
 layout_mode = 2
-size_flags_horizontal = 4
-size_flags_vertical = 1
-theme_override_constants/separation = 12
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 30
+theme_override_constants/margin_top = 24
+theme_override_constants/margin_right = 30
+theme_override_constants/margin_bottom = 20
 
-[node name="Title" type="Label" parent="Background/VBoxContainer"]
+[node name="MainVBox" type="VBoxContainer" parent="Background/Margin"]
+layout_mode = 2
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 16
+
+[node name="Title" type="Label" parent="Background/Margin/MainVBox"]
 layout_mode = 2
 text = "RANKBORN"
 horizontal_alignment = 1
-theme_override_font_sizes/font_size = 52
+theme_override_colors/font_color = Color(0.8, 0.85, 0.9, 1)
+theme_override_font_sizes/font_size = 46
 
-[node name="HostButton" type="Button" parent="Background/VBoxContainer"]
-unique_name_in_owner = true
+[node name="ColumnsHBox" type="HBoxContainer" parent="Background/Margin/MainVBox"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 16
+
+[node name="CreateSection" type="PanelContainer" parent="Background/Margin/MainVBox/ColumnsHBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_styles/panel = SubResource("StyleBoxFlat_section")
+
+[node name="CreateVBox" type="VBoxContainer" parent="Background/Margin/MainVBox/ColumnsHBox/CreateSection"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 10
+
+[node name="SectionTitle" type="Label" parent="Background/Margin/MainVBox/ColumnsHBox/CreateSection/CreateVBox"]
 layout_mode = 2
 text = "Создать игру"
-
-[node name="FoundLabel" type="Label" parent="Background/VBoxContainer"]
-layout_mode = 2
-text = "Игры в локальной сети"
 horizontal_alignment = 1
+theme_override_colors/font_color = Color(0.65, 0.78, 1, 1)
+theme_override_font_sizes/font_size = 18
 
-[node name="FoundGamesList" type="ItemList" parent="Background/VBoxContainer"]
+[node name="HostButton" type="Button" parent="Background/Margin/MainVBox/ColumnsHBox/CreateSection/CreateVBox"]
 unique_name_in_owner = true
 layout_mode = 2
-custom_minimum_size = Vector2(600, 130)
-allow_reselect = true
+custom_minimum_size = Vector2(0, 40)
+text = "Создать лобби"
 
-[node name="JoinSelectedButton" type="Button" parent="Background/VBoxContainer"]
+[node name="StartButton" type="Button" parent="Background/Margin/MainVBox/ColumnsHBox/CreateSection/CreateVBox"]
 unique_name_in_owner = true
 layout_mode = 2
+custom_minimum_size = Vector2(0, 40)
 disabled = true
-text = "Подключиться к выбранной"
+visible = false
+text = "Начать матч"
 
-[node name="JoinButton" type="Button" parent="Background/VBoxContainer"]
+[node name="PlayersLabel" type="Label" parent="Background/Margin/MainVBox/ColumnsHBox/CreateSection/CreateVBox"]
+layout_mode = 2
+text = "Игроки в лобби"
+theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(0.6, 0.65, 0.7, 1)
+
+[node name="PlayerList" type="ItemList" parent="Background/Margin/MainVBox/ColumnsHBox/CreateSection/CreateVBox"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Присоединиться по IP"
+size_flags_vertical = 3
+custom_minimum_size = Vector2(0, 100)
 
-[node name="AddressInput" type="LineEdit" parent="Background/VBoxContainer"]
-unique_name_in_owner = true
-layout_mode = 2
-placeholder_text = "IP хоста (если не нашлась в списке)"
-
-[node name="PortInput" type="LineEdit" parent="Background/VBoxContainer"]
-unique_name_in_owner = true
-layout_mode = 2
-placeholder_text = "7000"
-
-[node name="IpLabel" type="Label" parent="Background/VBoxContainer"]
+[node name="IpLabel" type="Label" parent="Background/Margin/MainVBox/ColumnsHBox/CreateSection/CreateVBox"]
 unique_name_in_owner = true
 layout_mode = 2
 text = ""
 horizontal_alignment = 1
 autowrap_mode = 2
+theme_override_font_sizes/font_size = 12
+theme_override_colors/font_color = Color(0.55, 0.6, 0.65, 1)
 
-[node name="StatusLabel" type="Label" parent="Background/VBoxContainer"]
-unique_name_in_owner = true
+[node name="JoinSection" type="PanelContainer" parent="Background/Margin/MainVBox/ColumnsHBox"]
 layout_mode = 2
-text = "Поиск игр в локалке..."
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_styles/panel = SubResource("StyleBoxFlat_section")
+
+[node name="JoinVBox" type="VBoxContainer" parent="Background/Margin/MainVBox/ColumnsHBox/JoinSection"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 10
+
+[node name="SectionTitle2" type="Label" parent="Background/Margin/MainVBox/ColumnsHBox/JoinSection/JoinVBox"]
+layout_mode = 2
+text = "Присоединиться"
 horizontal_alignment = 1
-autowrap_mode = 2
+theme_override_colors/font_color = Color(0.65, 0.78, 1, 1)
+theme_override_font_sizes/font_size = 18
 
-[node name="StartButton" type="Button" parent="Background/VBoxContainer"]
+[node name="FoundLabel" type="Label" parent="Background/Margin/MainVBox/ColumnsHBox/JoinSection/JoinVBox"]
+layout_mode = 2
+text = "Игры в локальной сети"
+theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(0.6, 0.65, 0.7, 1)
+
+[node name="FoundGamesList" type="ItemList" parent="Background/Margin/MainVBox/ColumnsHBox/JoinSection/JoinVBox"]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_vertical = 3
+custom_minimum_size = Vector2(0, 100)
+allow_reselect = true
+
+[node name="JoinSelectedButton" type="Button" parent="Background/Margin/MainVBox/ColumnsHBox/JoinSection/JoinVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(0, 36)
 disabled = true
-visible = false
-text = "Начать матч"
+text = "Подключиться к выбранной"
 
-[node name="PlayerList" type="ItemList" parent="Background/VBoxContainer"]
+[node name="SepLabel" type="Label" parent="Background/Margin/MainVBox/ColumnsHBox/JoinSection/JoinVBox"]
+layout_mode = 2
+text = "или по IP вручную"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 13
+theme_override_colors/font_color = Color(0.5, 0.55, 0.6, 1)
+
+[node name="IpPortHBox" type="HBoxContainer" parent="Background/Margin/MainVBox/ColumnsHBox/JoinSection/JoinVBox"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="AddressInput" type="LineEdit" parent="Background/Margin/MainVBox/ColumnsHBox/JoinSection/JoinVBox/IpPortHBox"]
 unique_name_in_owner = true
 layout_mode = 2
-custom_minimum_size = Vector2(600, 140)
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(0, 36)
+placeholder_text = "IP хоста"
 
-[node name="ExitButton" type="Button" parent="Background/VBoxContainer"]
+[node name="PortInput" type="LineEdit" parent="Background/Margin/MainVBox/ColumnsHBox/JoinSection/JoinVBox/IpPortHBox"]
 unique_name_in_owner = true
 layout_mode = 2
+custom_minimum_size = Vector2(80, 36)
+placeholder_text = "7000"
+
+[node name="JoinButton" type="Button" parent="Background/Margin/MainVBox/ColumnsHBox/JoinSection/JoinVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(0, 40)
+text = "Присоединиться"
+
+[node name="BottomBar" type="HBoxContainer" parent="Background/Margin/MainVBox"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="StatusLabel" type="Label" parent="Background/Margin/MainVBox/BottomBar"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Поиск игр в локалке..."
+autowrap_mode = 2
+theme_override_font_sizes/font_size = 14
+
+[node name="ExitButton" type="Button" parent="Background/Margin/MainVBox/BottomBar"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(100, 0)
 text = "Выход"

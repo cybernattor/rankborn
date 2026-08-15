@@ -1,4 +1,4 @@
-[gd_scene format=3 uid="uid://weaponhud001"]
+[gd_scene load_steps=8 format=3 uid="uid://weaponhud001"]
 
 [ext_resource type="Script" path="res://scripts/ui/weapon_hud.gd" id="1"]
 
@@ -16,48 +16,157 @@ corner_radius_top_right = 3
 corner_radius_bottom_right = 3
 corner_radius_bottom_left = 3
 
+[sub_resource type="Shader" id="Shader_scope"]
+code = "shader_type canvas_item;
+
+void fragment() {
+	vec2 uv = SCREEN_UV;
+	vec2 center = vec2(0.5, 0.5);
+	vec2 diff = uv - center;
+	diff.x *= SCREEN_PIXEL_SIZE.y / SCREEN_PIXEL_SIZE.x;
+	float dist = length(diff);
+	float radius = 0.18;
+	float edge = 0.015;
+	float alpha = smoothstep(radius - edge, radius + edge, dist);
+	COLOR = vec4(0.0, 0.0, 0.0, alpha * 0.88);
+}
+"
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_scope"]
+shader = SubResource("Shader_scope")
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_scope_ring"]
+bg_color = Color(0, 0, 0, 0)
+corner_radius_top_left = 999
+corner_radius_top_right = 999
+corner_radius_bottom_right = 999
+corner_radius_bottom_left = 999
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.7, 0.7, 0.7, 0.8)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_dot"]
+bg_color = Color(1, 1, 1, 0.95)
+corner_radius_top_left = 999
+corner_radius_top_right = 999
+corner_radius_bottom_right = 999
+corner_radius_bottom_left = 999
+
 [node name="WeaponHUD" type="CanvasLayer"]
 script = ExtResource("1")
 
-[node name="Crosshair" type="Control" parent="."]
+[node name="UILayer" type="Control" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Crosshair" type="Control" parent="UILayer"]
 anchors_preset = 8
 anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -8.0
-offset_top = -8.0
-offset_right = 8.0
-offset_bottom = 8.0
+offset_left = -50.0
+offset_top = -50.0
+offset_right = 50.0
+offset_bottom = 50.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="Dot" type="ColorRect" parent="Crosshair"]
+[node name="Dot" type="Panel" parent="UILayer/Crosshair"]
 layout_mode = 0
-offset_left = -1.5
-offset_top = -1.5
-offset_right = 1.5
-offset_bottom = 1.5
-color = Color(1, 1, 1, 0.7)
+offset_left = -2.0
+offset_top = -2.0
+offset_right = 2.0
+offset_bottom = 2.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_dot")
 
-[node name="CrossV" type="ColorRect" parent="Crosshair"]
+[node name="CrossTop" type="ColorRect" parent="UILayer/Crosshair"]
 layout_mode = 0
 offset_left = -0.5
-offset_top = -6.0
+offset_top = -7.0
 offset_right = 0.5
-offset_bottom = -2.0
-color = Color(1, 1, 1, 0.5)
+offset_bottom = -3.0
+color = Color(1, 1, 1, 0.8)
 
-[node name="CrossH" type="ColorRect" parent="Crosshair"]
+[node name="CrossBottom" type="ColorRect" parent="UILayer/Crosshair"]
 layout_mode = 0
-offset_left = -6.0
-offset_top = -0.5
-offset_right = -2.0
-offset_bottom = 0.5
-color = Color(1, 1, 1, 0.5)
+offset_left = -0.5
+offset_top = 3.0
+offset_right = 0.5
+offset_bottom = 7.0
+color = Color(1, 1, 1, 0.8)
 
-[node name="BottomRight" type="Control" parent="."]
+[node name="CrossLeft" type="ColorRect" parent="UILayer/Crosshair"]
+layout_mode = 0
+offset_left = -7.0
+offset_top = -0.5
+offset_right = -3.0
+offset_bottom = 0.5
+color = Color(1, 1, 1, 0.8)
+
+[node name="CrossRight" type="ColorRect" parent="UILayer/Crosshair"]
+layout_mode = 0
+offset_left = 3.0
+offset_top = -0.5
+offset_right = 7.0
+offset_bottom = 0.5
+color = Color(1, 1, 1, 0.8)
+
+[node name="HitMarker" type="Control" parent="UILayer"]
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -12.0
+offset_top = -12.0
+offset_right = 12.0
+offset_bottom = 12.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+visible = false
+
+[node name="Line1" type="ColorRect" parent="UILayer/HitMarker"]
+layout_mode = 0
+offset_left = -8.0
+offset_top = -8.0
+offset_right = -3.0
+offset_bottom = -3.0
+color = Color(1, 1, 1, 0.9)
+
+[node name="Line2" type="ColorRect" parent="UILayer/HitMarker"]
+layout_mode = 0
+offset_left = 3.0
+offset_top = -8.0
+offset_right = 8.0
+offset_bottom = -3.0
+color = Color(1, 1, 1, 0.9)
+
+[node name="Line3" type="ColorRect" parent="UILayer/HitMarker"]
+layout_mode = 0
+offset_left = -8.0
+offset_top = 3.0
+offset_right = -3.0
+offset_bottom = 8.0
+color = Color(1, 1, 1, 0.9)
+
+[node name="Line4" type="ColorRect" parent="UILayer/HitMarker"]
+layout_mode = 0
+offset_left = 3.0
+offset_top = 3.0
+offset_right = 8.0
+offset_bottom = 8.0
+color = Color(1, 1, 1, 0.9)
+
+[node name="BottomRight" type="Control" parent="UILayer"]
 anchors_preset = 3
 anchor_left = 1.0
 anchor_top = 1.0
@@ -70,7 +179,7 @@ offset_bottom = -20.0
 grow_horizontal = 0
 grow_vertical = 0
 
-[node name="AmmoLabel" type="Label" parent="BottomRight"]
+[node name="AmmoLabel" type="Label" parent="UILayer/BottomRight"]
 layout_mode = 0
 offset_left = 0.0
 offset_top = 0.0
@@ -82,7 +191,7 @@ theme_override_colors/font_color = Color(1, 1, 1, 0.9)
 theme_override_font_sizes/font_size = 28
 text = "30 / 30"
 
-[node name="ReloadBar" type="ProgressBar" parent="BottomRight"]
+[node name="ReloadBar" type="ProgressBar" parent="UILayer/BottomRight"]
 layout_mode = 0
 offset_left = 0.0
 offset_top = 48.0
@@ -93,3 +202,78 @@ theme_override_styles/fill = SubResource("StyleBoxFlat_reload_fill")
 max_value = 100.0
 value = 0.0
 show_percentage = false
+
+[node name="ScopeOverlay" type="ColorRect" parent="UILayer"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+material = SubResource("ShaderMaterial_scope")
+color = Color(0, 0, 0, 1)
+visible = false
+
+[node name="ScopeRing" type="Panel" parent="UILayer"]
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -40.0
+offset_top = -40.0
+offset_right = 40.0
+offset_bottom = 40.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_scope_ring")
+visible = false
+
+[node name="ScopeDot" type="ColorRect" parent="UILayer"]
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -1.5
+offset_top = -1.5
+offset_right = 1.5
+offset_bottom = 1.5
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(1, 0.15, 0.15, 0.9)
+visible = false
+
+[node name="ScopeCrossV" type="ColorRect" parent="UILayer"]
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -0.5
+offset_top = -35.0
+offset_right = 0.5
+offset_bottom = -5.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(1, 1, 1, 0.35)
+visible = false
+
+[node name="ScopeCrossH" type="ColorRect" parent="UILayer"]
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -35.0
+offset_top = -0.5
+offset_right = -5.0
+offset_bottom = 0.5
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(1, 1, 1, 0.35)
+visible = false
