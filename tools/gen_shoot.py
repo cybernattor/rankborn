@@ -19,38 +19,37 @@ def save_wav(path, samples, rate=RATE):
         f.write(data.tobytes())
 
 def gen_shoot():
-    dur = 0.25
+    dur = 0.18
     n = int(dur * RATE)
     t = np.linspace(0, dur, n, endpoint=False)
     
-    # === LAYER 1: Noise burst (the main "BANG") ===
+    # === LAYER 1: Noise burst (the main "CRACK") ===
     raw_noise = np.random.uniform(-1.0, 1.0, n)
-    # Hard gate: full volume for first 2ms, then fast decay
+    # Hard gate: full volume for first 1ms, then fast decay
     noise_env = np.zeros(n)
-    gate_samples = int(0.002 * RATE)
-    decay_samples = int(0.08 * RATE)
+    gate_samples = int(0.001 * RATE)
+    decay_samples = int(0.04 * RATE)
     noise_env[:gate_samples] = 1.0
     end = min(gate_samples + decay_samples, n)
     noise_env[gate_samples:end] = np.linspace(1.0, 0.0, end - gate_samples)
-    noise_burst = raw_noise * noise_env * 0.9
+    noise_burst = raw_noise * noise_env * 0.8
     
-    # === LAYER 2: Low boom (muzzle blast body) ===
-    boom = np.sin(2 * np.pi * 60 * t) * np.exp(-t * 15) * 0.7
-    boom += np.sin(2 * np.pi * 45 * t) * np.exp(-t * 12) * 0.5
+    # === LAYER 2: Mid body (rifle snap, not boom) ===
+    boom = np.sin(2 * np.pi * 150 * t) * np.exp(-t * 30) * 0.4
+    boom += np.sin(2 * np.pi * 200 * t) * np.exp(-t * 40) * 0.3
     
-    # === LAYER 3: Mid crack (supersonic snap) ===
-    crack = np.sin(2 * np.pi * 500 * t) * np.exp(-t * 50) * 0.4
-    crack += np.sin(2 * np.pi * 800 * t) * np.exp(-t * 70) * 0.25
+    # === LAYER 3: High crack (supersonic snap) ===
+    crack = np.sin(2 * np.pi * 600 * t) * np.exp(-t * 60) * 0.5
+    crack += np.sin(2 * np.pi * 1000 * t) * np.exp(-t * 80) * 0.3
     
-    # === LAYER 4: Metal ring (barrel resonance) ===
-    ring = np.sin(2 * np.pi * 3200 * t) * np.exp(-t * 40) * 0.08
+    # === LAYER 4: Metal ring (brief barrel resonance) ===
+    ring = np.sin(2 * np.pi * 2800 * t) * np.exp(-t * 50) * 0.06
     
-    # === LAYER 5: Reverb tail ===
+    # === LAYER 5: Short reverb ===
     tail = np.zeros(n)
-    # Simple multi-tap delay
-    for delay_ms in [15, 30, 50, 80]:
+    for delay_ms in [10, 22, 40]:
         d = int(delay_ms / 1000.0 * RATE)
-        gain = 0.12 * np.exp(-delay_ms / 40.0)
+        gain = 0.08 * np.exp(-delay_ms / 25.0)
         if d < n:
             tail[d:] += noise_burst[:n-d] * gain
     

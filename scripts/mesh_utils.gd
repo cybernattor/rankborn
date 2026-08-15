@@ -118,20 +118,38 @@ static func _terrain_color(h: float, dirt: Color, g_dark: Color, g_mid: Color, g
 		return g_light.lerp(rock, clamp((h - 6.0) / 6.0, 0.0, 1.0))
 
 
-static func flat_material(color: Color, rough: float = 0.9) -> StandardMaterial3D:
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = color
-	mat.roughness = rough
-	mat.metallic = 0.0
-	mat.flat_shading = true
+static func flat_material(color: Color, rough: float = 0.9) -> ShaderMaterial:
+	# Тоон-шейдер с rim lighting для low-poly стиля
+	var mat := ShaderMaterial.new()
+	mat.shader = preload("res://shaders/char_toon.gdshader")
+	mat.set_shader_parameter("albedo_color", color)
+	mat.set_shader_parameter("roughness", rough)
+	mat.set_shader_parameter("metallic", 0.0)
 	return mat
 
 
-static func terrain_material() -> StandardMaterial3D:
-	var mat := StandardMaterial3D.new()
-	mat.vertex_color_use_as_albedo = true
-	mat.roughness = 0.85
-	mat.flat_shading = true
+static func outline_material(color: Color = Color(0.05, 0.05, 0.08), width: float = 0.07) -> ShaderMaterial:
+	# Outline-шейдер (inverted hull) для обводки
+	var mat := ShaderMaterial.new()
+	mat.shader = preload("res://shaders/char_outline.gdshader")
+	mat.set_shader_parameter("outline_color", color)
+	mat.set_shader_parameter("outline_width", width)
+	return mat
+
+
+static func add_outline_to_mesh(mesh_instance: MeshInstance3D, color: Color = Color(0.05, 0.05, 0.08), width: float = 0.07) -> MeshInstance3D:
+	# Создаёт дочерний MeshInstance3D с outline шейдером (inverted hull)
+	var outline := MeshInstance3D.new()
+	outline.mesh = mesh_instance.mesh
+	outline.set_surface_override_material(0, outline_material(color, width))
+	outline.name = mesh_instance.name + "Outline"
+	mesh_instance.add_child(outline)
+	return outline
+
+
+static func terrain_material() -> ShaderMaterial:
+	var mat := ShaderMaterial.new()
+	mat.shader = preload("res://shaders/terrain.gdshader")
 	return mat
 
 
