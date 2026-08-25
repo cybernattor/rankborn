@@ -143,10 +143,14 @@ func shoot() -> void:
 				if is_headshot:
 					final_damage *= headshot_multiplier
 
-				var was_alive := health.is_alive
-				health.take_damage.rpc_id(collider.get_multiplayer_authority(), final_damage)
-				var is_kill := was_alive and not health.is_alive
-				hit_confirmed.emit(is_headshot, is_kill)
+				var shooter_id := multiplayer.get_unique_id()
+				health.take_damage.rpc_id(collider.get_multiplayer_authority(), final_damage, shooter_id)
+				# Попадание подтверждаем сразу (белый/жёлтый маркер).
+				# Факт убийства узнаём только асинхронно от самой жертвы
+				# через kill_confirmed — только у неё есть актуальный is_alive.
+				hit_confirmed.emit(is_headshot, false)
+				if not health.kill_confirmed.is_connected(_on_kill_confirmed):
+					health.kill_confirmed.connect(_on_kill_confirmed, CONNECT_ONE_SHOT)
 			_spawn_blood.rpc(hit_position, hit_normal)
 		else:
 			_spawn_impact.rpc(hit_position, hit_normal)
@@ -415,3 +419,7 @@ func _get_player() -> Node:
 			return node
 		node = node.get_parent()
 	return null
+
+
+func _on_kill_confirmed() -> void:
+	hit_confirmed.emit(false, true)

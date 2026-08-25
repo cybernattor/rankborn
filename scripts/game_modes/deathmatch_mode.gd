@@ -13,8 +13,10 @@ var scores: Dictionary = {}
 
 func _ready() -> void:
 	super._ready()
-	# Подключаемся к сигналам GameMode
-	player_died.connect(on_player_die)
+	# on_player_die вызывается напрямую из GameMode._broadcast_death и сам
+	# эмитит player_died (см. GameMode.on_player_die) — подписываться здесь
+	# на тот же сигнал тем же методом нельзя: on_player_die -> emit
+	# player_died -> on_player_die -> ... это бесконечная рекурсия.
 
 
 func on_player_spawn(player_id: int) -> void:

@@ -5,7 +5,10 @@ class_name HealthComponent
 ## Работает по сети: RPC any_peer → authority.
 
 signal health_changed(new_health: float)
-signal died
+signal died(attacker_id: int)
+## Локальный сигнал: приходит только на машине атакующего, когда жертва
+## подтвердила, что удар был смертельным (см. _notify_kill).
+signal kill_confirmed
 
 @export var max_health: float = 100.0
 
@@ -19,9 +22,9 @@ func _ready() -> void:
 
 
 ## Получение урона. RPC from any peer → authority.
-## Используется так: `health_component.take_damage.rpc_id(authority_id, amount)`
+## Используется так: `health_component.take_damage.rpc_id(authority_id, amount, attacker_id)`
 @rpc("any_peer", "reliable")
-func take_damage(amount: float) -> void:
+func take_damage(amount: float, attacker_id: int = -1) -> void:
 	if not is_multiplayer_authority() or not is_alive:
 		return
 
@@ -30,7 +33,20 @@ func take_damage(amount: float) -> void:
 
 	if current_health <= 0.0:
 		is_alive = false
-		died.emit()
+		died.emit(attacker_id)
+		# Сообщаем атакующему, что это был смертельный удар — только у него
+		# должен сработать красный kill-маркер, а не на основании локальной,
+		# несинхронизированной копии is_alive (которая всегда была бы stale).
+		if attacker_id > 0 and attacker_id != get_multiplayer_authority():
+			_notify_kill.rpc_id(attacker_id)
+
+
+## Вызывается жертвой (authority этого компонента) на машине атакующего.
+## Именно поэтому rpc-режим "authority": проверка на стороне получателя
+## гарантирует, что сообщение реально пришло от владельца этого HealthComponent.
+@rpc("authority", "reliable")
+func _notify_kill() -> void:
+	kill_confirmed.emit()
 
 
 ## Лечение (локальное, не RPC)

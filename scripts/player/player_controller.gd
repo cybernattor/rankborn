@@ -153,8 +153,14 @@ func _process(delta: float) -> void:
 	camera.fov = lerp(camera.fov, target_fov, AIM_FOV_SPEED * delta)
 
 
-func _on_died() -> void:
+func _on_died(attacker_id: int) -> void:
 	state_machine.change_state("DeadState")
+	# Только сама жертва (authority своего HealthComponent, т.е. эта ветка)
+	# знает о своей смерти — сообщаем хосту, чтобы GameMode/счёт/killfeed
+	# обновились одинаково у всех.
+	var game_mode := get_tree().current_scene.get_node_or_null("GameMode")
+	if game_mode:
+		game_mode.report_death.rpc_id(1, multiplayer.get_unique_id(), attacker_id)
 
 
 func _on_mobile_input(action: String, value) -> void:
