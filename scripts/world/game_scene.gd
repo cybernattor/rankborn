@@ -69,8 +69,20 @@ func _build_lowpoly_terrain() -> void:
 			child.queue_free()
 
 	var col := CollisionShape3D.new()
-	col.shape = terrain_mesh.create_trimesh_shape()
+	var terrain_collision := terrain_mesh.create_trimesh_shape()
+	terrain_collision.backface_collision = true
+	col.shape = terrain_collision
 	ground_body.add_child(col)
+
+	var safety_floor := StaticBody3D.new()
+	safety_floor.name = "TerrainSafetyFloor"
+	var safety_collision := CollisionShape3D.new()
+	var safety_shape := BoxShape3D.new()
+	safety_shape.size = Vector3(100.0, 2.0, 100.0)
+	safety_collision.shape = safety_shape
+	safety_floor.position = Vector3(0.0, -14.0, 0.0)
+	safety_floor.add_child(safety_collision)
+	add_child(safety_floor)
 
 
 func _on_player_connected(id: int) -> void:
@@ -106,15 +118,20 @@ func _spawn_player(id: int) -> void:
 
 
 func _get_spawn_position(id: int) -> Vector3:
-	if spawn_points.get_child_count() == 0:
-		return Vector3(0, 5, 0)
-	var spawn_index: int = absi(id) % spawn_points.get_child_count()
-	var pos: Vector3 = spawn_points.get_child(spawn_index).global_position as Vector3
-	var terrain_y := _terrain_noise.get_noise_2d(pos.x, pos.z) * 12.0
-	pos.y = terrain_y + 2.0
-	return pos
-
-
+	# Identical deterministic slots are used by host and every client.
+	# This avoids race-dependent or overlapping spawns during peer sync.
+	var spawn_slots := [
+		Vector2(-38.0, -38.0),
+		Vector2(38.0, -38.0),
+		Vector2(-38.0, 38.0),
+		Vector2(38.0, 38.0),
+		Vector2(0.0, -46.0),
+		Vector2(0.0, 46.0),
+	]
+	var slot_index := posmod(id - 1, spawn_slots.size())
+	var slot: Vector2 = spawn_slots[slot_index]
+	var terrain_y := _terrain_noise.get_noise_2d(slot.x, slot.y) * 12.0
+	return Vector3(slot.x, terrain_y + 2.4, slot.y)
 # --- Mobile input routing ---
 
 func _on_mobile_move(vec: Vector2) -> void:
