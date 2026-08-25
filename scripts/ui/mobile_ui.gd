@@ -1,12 +1,12 @@
 extends Control
 
-@onready var left_joystick: TextureRect = $LeftJoystick
-@onready var left_stick: TextureRect = $LeftJoystick/LeftStick
-@onready var right_joystick: TextureRect = $RightJoystick
-@onready var right_stick: TextureRect = $RightJoystick/RightStick
-@onready var shoot_button: TextureButton = $ShootButton
-@onready var reload_button: TextureButton = $ReloadButton
-@onready var interact_button: TextureButton = $InteractButton
+@onready var left_joystick: Control = $LeftJoystick
+@onready var left_stick: Control = $LeftJoystick/LeftStick
+@onready var right_joystick: Control = $RightJoystick
+@onready var right_stick: Control = $RightJoystick/RightStick
+@onready var shoot_button: Button = $ShootButton
+@onready var reload_button: Button = $ReloadButton
+@onready var interact_button: Button = $InteractButton
 
 var left_drag_id: int = -1
 var right_drag_id: int = -1
@@ -15,6 +15,8 @@ var look_vec: Vector2 = Vector2.ZERO
 var shoot_pressed: bool = false
 var reload_pressed: bool = false
 var interact_pressed: bool = false
+var left_stick_rest_position := Vector2.ZERO
+var right_stick_rest_position := Vector2.ZERO
 
 signal move_input(vec: Vector2)
 signal look_input(vec: Vector2)
@@ -23,11 +25,13 @@ signal reload_input
 signal interact_input
 
 func _ready() -> void:
-	if not DisplayServer.is_touchscreen_available():
+    left_stick_rest_position = left_stick.position
+    right_stick_rest_position = right_stick.position
+	if OS.get_name() != "Android":
 		hide()
 		return
 	
-	shoot_button.pressed.connect(_on_shoot_pressed)
+	shoot_button.button_down.connect(_on_shoot_pressed)
 	shoot_button.button_up.connect(_on_shoot_released)
 	reload_button.pressed.connect(_on_reload_pressed)
 	interact_button.pressed.connect(_on_interact_pressed)
@@ -80,7 +84,7 @@ func _point_in_rect(point: Vector2, rect: Rect2) -> bool:
 
 func _animate_stick_to_center(stick: TextureRect) -> void:
 	var tween = create_tween()
-	tween.tween_property(stick, "position", Vector2.ZERO, 0.15).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tween.tween_property(stick, "position", _get_stick_rest_position(stick), 0.15).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 
 func _on_shoot_pressed() -> void:
 	shoot_pressed = true
@@ -97,3 +101,6 @@ func _on_reload_pressed() -> void:
 func _on_interact_pressed() -> void:
 	interact_pressed = true
 	interact_input.emit()
+
+func _get_stick_rest_position(stick: Control) -> Vector2:
+    return left_stick_rest_position if stick == left_stick else right_stick_rest_position

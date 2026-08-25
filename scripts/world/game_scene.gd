@@ -43,7 +43,7 @@ func _ready() -> void:
 		_spawn_player(my_id)
 
 	# Mobile UI: подключаем сигналы
-	if mobile_ui and mobile_ui.visible:
+	if mobile_ui:
 		mobile_ui.move_input.connect(_on_mobile_move)
 		mobile_ui.look_input.connect(_on_mobile_look)
 		mobile_ui.shoot_input.connect(_on_mobile_shoot)

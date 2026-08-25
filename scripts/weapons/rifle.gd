@@ -68,9 +68,11 @@ func _process(delta: float) -> void:
 			return
 
 	# Проверка ввода стрельбы
-	var shoot_pressed := Input.is_action_pressed("shoot")
-	if player and player.get("mobile_shoot_pressed"):
-		shoot_pressed = true
+		var shoot_pressed := false
+		if OS.get_name() == "Android":
+				shoot_pressed = player != null and bool(player.get("mobile_shoot_pressed"))
+		else:
+				shoot_pressed = Input.is_action_pressed("shoot")
 	if shoot_pressed and can_fire and not is_reloading:
 		shoot()
 
