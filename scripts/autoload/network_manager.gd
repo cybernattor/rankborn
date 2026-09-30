@@ -33,7 +33,7 @@ func host_game(port: int = DEFAULT_PORT) -> void:
 	multiplayer.multiplayer_peer = peer
 	is_host = true
 	players.clear()
-	players[1] = {"name": "Host"}
+	players[1] = {"name": "Host", "spawn_index": 0}
 	var discovery_err := LanDiscovery.start_hosting(port, "Rankborn Lobby")
 	if discovery_err != OK:
 		push_warning("LAN discovery unavailable — lobby won't be visible in browser")
@@ -101,27 +101,25 @@ func _start_match() -> void:
 @rpc("authority", "reliable")
 func _sync_player_list(list: Dictionary) -> void:
 	players = list
-	player_connected.emit(multiplayer.get_unique_id())
+	for id in players:
+		player_connected.emit(id)
 	print("Synced player list: %s" % str(players.keys()))
 
 
-@rpc("authority", "reliable")
-func _register_player(id: int, player_name: String) -> void:
-	players[id] = {"name": player_name}
-	player_connected.emit(id)
-	print("Registered remote player: %d" % id)
-
-
 func _on_peer_connected(id: int) -> void:
-	players[id] = {"name": "Player_%d" % id}
+	if not is_host:
+		return
+	var used_slots: Array[int] = []
+	for info in players.values():
+		used_slots.append(int(info.spawn_index))
+	var spawn_index: int = 0
+	while spawn_index in used_slots:
+		spawn_index += 1
+	players[id] = {"name": "Player_%d" % id, "spawn_index": spawn_index}
 	player_connected.emit(id)
 	print("Player connected: %d" % id)
 
-	if is_host:
-		_sync_player_list.rpc_id(id, players)
-		for peer_id in players.keys():
-			if peer_id != id and peer_id != 1:
-				_register_player.rpc_id(peer_id, id, "Player_%d" % id)
+	_sync_player_list.rpc(players)
 
 	if _match_in_progress:
 		_start_match.rpc_id(id)
@@ -135,7 +133,6 @@ func _on_peer_disconnected(id: int) -> void:
 
 func _on_connected_to_server() -> void:
 	var my_id := multiplayer.get_unique_id()
-	players[my_id] = {"name": "Player_%d" % my_id}
 	connection_succeeded.emit()
 	print("Connected to server as %d" % my_id)
 

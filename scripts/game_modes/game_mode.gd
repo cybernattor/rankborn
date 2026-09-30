@@ -30,7 +30,7 @@ func on_player_die(player_id: int, killer_id: int = -1) -> void:
 ## Жертва (authority своего HealthComponent) сообщает хосту о своей смерти.
 ## Только хост ведёт единый, авторитетный счёт — поэтому вызов всегда
 ## адресован peer 1, а не выполняется локально у отправителя.
-@rpc("any_peer", "reliable")
+@rpc("any_peer", "call_local", "reliable")
 func report_death(victim_id: int, killer_id: int) -> void:
 	if not multiplayer.is_server():
 		return

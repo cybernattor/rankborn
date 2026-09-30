@@ -25,8 +25,8 @@ signal reload_input
 signal interact_input
 
 func _ready() -> void:
-    left_stick_rest_position = left_stick.position
-    right_stick_rest_position = right_stick.position
+	left_stick_rest_position = left_stick.position
+	right_stick_rest_position = right_stick.position
 	if OS.get_name() != "Android":
 		hide()
 		return
@@ -82,7 +82,7 @@ func _point_in_rect(point: Vector2, rect: Rect2) -> bool:
 	return point.x >= rect.position.x and point.x <= rect.position.x + rect.size.x and \
 		   point.y >= rect.position.y and point.y <= rect.position.y + rect.size.y
 
-func _animate_stick_to_center(stick: TextureRect) -> void:
+func _animate_stick_to_center(stick: Control) -> void:
 	var tween = create_tween()
 	tween.tween_property(stick, "position", _get_stick_rest_position(stick), 0.15).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 
@@ -103,4 +103,4 @@ func _on_interact_pressed() -> void:
 	interact_input.emit()
 
 func _get_stick_rest_position(stick: Control) -> Vector2:
-    return left_stick_rest_position if stick == left_stick else right_stick_rest_position
+	return left_stick_rest_position if stick == left_stick else right_stick_rest_position

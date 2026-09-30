@@ -78,8 +78,13 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 10, -30)
 [node name="Spawn6" type="Marker3D" parent="SpawnPoints" unique_id=806687925]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 10, 30)
 
+[node name="Spawn7" type="Marker3D" parent="SpawnPoints"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -30, 10, 0)
+
 [node name="KillZone" type="Area3D" parent="." unique_id=1080955902]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -20, 0)
+collision_layer = 0
+collision_mask = 2
 script = ExtResource("4_6hqhf")
 
 [node name="KillShape" type="CollisionShape3D" parent="KillZone" unique_id=1447315701]
@@ -88,29 +93,33 @@ shape = SubResource("BoxShape3D_kill")
 [node name="Boundaries" type="Node3D" parent="." unique_id=1099118386]
 
 [node name="WallNorth" type="StaticBody3D" parent="Boundaries" unique_id=651227614]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 10, -55)
-collision_layer = 0
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 10, -50)
+collision_layer = 1
+collision_mask = 2
 
 [node name="Shape" type="CollisionShape3D" parent="Boundaries/WallNorth" unique_id=1845833788]
 shape = SubResource("BoxShape3D_wall_z")
 
 [node name="WallSouth" type="StaticBody3D" parent="Boundaries" unique_id=1848871974]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 10, 55)
-collision_layer = 0
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 10, 50)
+collision_layer = 1
+collision_mask = 2
 
 [node name="Shape" type="CollisionShape3D" parent="Boundaries/WallSouth" unique_id=249971729]
 shape = SubResource("BoxShape3D_wall_z")
 
 [node name="WallWest" type="StaticBody3D" parent="Boundaries" unique_id=2036410878]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -55, 10, 0)
-collision_layer = 0
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -50, 10, 0)
+collision_layer = 1
+collision_mask = 2
 
 [node name="Shape" type="CollisionShape3D" parent="Boundaries/WallWest" unique_id=113095929]
 shape = SubResource("BoxShape3D_wall_x")
 
 [node name="WallEast" type="StaticBody3D" parent="Boundaries" unique_id=663681674]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 55, 10, 0)
-collision_layer = 0
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 50, 10, 0)
+collision_layer = 1
+collision_mask = 2
 
 [node name="Shape" type="CollisionShape3D" parent="Boundaries/WallEast" unique_id=362588985]
 shape = SubResource("BoxShape3D_wall_x")

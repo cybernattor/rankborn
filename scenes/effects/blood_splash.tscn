@@ -1,4 +1,4 @@
-[gd_scene load_steps=4 format=3 uid="uid://c53qtw2523fva"]
+[gd_scene load_steps=7 format=3 uid="uid://c53qtw2523fva"]
 
 [sub_resource type="ParticleProcessMaterial" id="ParticleProcessMaterial_blood"]
 direction = Vector3(0, -1, 0)
@@ -24,15 +24,24 @@ damping_min = 0.5
 damping_max = 2.0
 color = Color(0.7, 0.1, 0.05, 0.4)
 
+[sub_resource type="StandardMaterial3D" id="Material_blood"]
+vertex_color_use_as_albedo = true
+
+[sub_resource type="StandardMaterial3D" id="Material_mist"]
+transparency = 1
+vertex_color_use_as_albedo = true
+
 [sub_resource type="BoxMesh" id="BoxMesh_particle"]
+material = SubResource("Material_blood")
 size = Vector3(0.025, 0.025, 0.025)
 
 [sub_resource type="BoxMesh" id="BoxMesh_mist"]
+material = SubResource("Material_mist")
 size = Vector3(0.05, 0.05, 0.05)
 
 [node name="BloodSplash" type="Node3D"]
 
-[node name="BloodDrops" type="GpuParticles3D" parent="."]
+[node name="BloodDrops" type="GPUParticles3D" parent="."]
 amount = 15
 lifetime = 0.8
 one_shot = true
@@ -40,7 +49,7 @@ explosiveness = 1.0
 process_material = SubResource("ParticleProcessMaterial_blood")
 draw_pass_1 = SubResource("BoxMesh_particle")
 
-[node name="BloodMist" type="GpuParticles3D" parent="."]
+[node name="BloodMist" type="GPUParticles3D" parent="."]
 amount = 8
 lifetime = 0.5
 one_shot = true

@@ -39,6 +39,7 @@ const AIM_FOV_SPEED := 12.0
 
 func _ready() -> void:
 	_build_lowpoly_body()
+	health_component.life_state_changed.connect(_on_life_state_changed)
 
 	if is_multiplayer_authority():
 		camera.current = true
@@ -56,11 +57,12 @@ func _ready() -> void:
 		camera.current = false
 		left_arm.visible = false
 		right_arm.visible = false
+	_on_life_state_changed(health_component.is_alive)
 
 
 func _build_lowpoly_body() -> void:
 	var humanoid_mesh := MeshUtils.make_humanoid()
-	var mat := MeshUtils.flat_material(Color(0.22, 0.38, 0.58))
+	var mat := MeshUtils.flat_material(Color.WHITE)
 
 	body_mesh = MeshInstance3D.new()
 	body_mesh.name = "BodyMesh"
@@ -71,14 +73,14 @@ func _build_lowpoly_body() -> void:
 	left_arm = MeshInstance3D.new()
 	left_arm.name = "LeftArm"
 	left_arm.mesh = MeshUtils.make_box(Vector3(0.14, 0.45, 0.14), Color(0.22, 0.38, 0.58))
-	left_arm.set_surface_override_material(0, MeshUtils.flat_material(Color(0.22, 0.38, 0.58)))
+	left_arm.set_surface_override_material(0, MeshUtils.flat_material(Color.WHITE))
 	left_arm.position = Vector3(-0.3, -0.3, -0.5)
 	camera.add_child(left_arm)
 
 	right_arm = MeshInstance3D.new()
 	right_arm.name = "RightArm"
 	right_arm.mesh = MeshUtils.make_box(Vector3(0.14, 0.45, 0.14), Color(0.22, 0.38, 0.58))
-	right_arm.set_surface_override_material(0, MeshUtils.flat_material(Color(0.22, 0.38, 0.58)))
+	right_arm.set_surface_override_material(0, MeshUtils.flat_material(Color.WHITE))
 	right_arm.position = Vector3(0.3, -0.3, -0.5)
 	camera.add_child(right_arm)
 
@@ -97,7 +99,9 @@ func setup_spawn(pos: Vector3) -> void:
 
 
 func apply_recoil(amount: float) -> void:
-	_recoil_x -= amount
+	var previous_pitch := head.rotation.x
+	head.rotation.x = clampf(previous_pitch + amount, -PI / 2, PI / 2)
+	_recoil_x += head.rotation.x - previous_pitch
 
 
 func _physics_process(delta: float) -> void:
@@ -141,7 +145,7 @@ func _process(delta: float) -> void:
 
 	# Восстановление отдачи камеры
 	if _recoil_x != 0.0:
-		var step := _recoil_x * _recoil_recovery * delta
+		var step := _recoil_x * (1.0 - exp(-_recoil_recovery * delta))
 		head.rotation.x -= step
 		head.rotation.x = clamp(head.rotation.x, -PI / 2, PI / 2)
 		_recoil_x -= step
@@ -150,7 +154,16 @@ func _process(delta: float) -> void:
 
 	# Плавная смена FOV при прицеливании
 	var target_fov := AIM_FOV if is_aiming else DEFAULT_FOV
-	camera.fov = lerp(camera.fov, target_fov, AIM_FOV_SPEED * delta)
+	camera.fov = lerpf(camera.fov, target_fov, 1.0 - exp(-AIM_FOV_SPEED * delta))
+
+
+func _on_life_state_changed(alive: bool) -> void:
+	visible = alive
+	$CollisionShape3D.set_deferred("disabled", not alive)
+	if not alive:
+		velocity = Vector3.ZERO
+		is_aiming = false
+		_recoil_x = 0.0
 
 
 func _on_died(attacker_id: int) -> void:
@@ -164,7 +177,7 @@ func _on_died(attacker_id: int) -> void:
 
 
 func _on_mobile_input(action: String, value) -> void:
-	if not is_multiplayer_authority():
+	if not is_multiplayer_authority() or not health_component.is_alive:
 		return
 	match action:
 		"mobile_move":

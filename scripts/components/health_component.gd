@@ -6,6 +6,7 @@ class_name HealthComponent
 
 signal health_changed(new_health: float)
 signal died(attacker_id: int)
+signal life_state_changed(alive: bool)
 ## Локальный сигнал: приходит только на машине атакующего, когда жертва
 ## подтвердила, что удар был смертельным (см. _notify_kill).
 signal kill_confirmed
@@ -13,7 +14,12 @@ signal kill_confirmed
 @export var max_health: float = 100.0
 
 var current_health: float
-var is_alive: bool = true
+var is_alive: bool = true:
+	set(value):
+		if is_alive == value:
+			return
+		is_alive = value
+		life_state_changed.emit(value)
 
 
 func _ready() -> void:
@@ -23,7 +29,7 @@ func _ready() -> void:
 
 ## Получение урона. RPC from any peer → authority.
 ## Используется так: `health_component.take_damage.rpc_id(authority_id, amount, attacker_id)`
-@rpc("any_peer", "reliable")
+@rpc("any_peer", "call_local", "reliable")
 func take_damage(amount: float, attacker_id: int = -1) -> void:
 	if not is_multiplayer_authority() or not is_alive:
 		return

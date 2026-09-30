@@ -13,18 +13,18 @@ static func make_humanoid() -> ArrayMesh:
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 
 	_add_box(st, Vector3(0, 0.95, 0), Vector3(0.5, 0.55, 0.3), Color(0.22, 0.38, 0.58))
+	_add_box(st, Vector3(0, 1.30, 0), Vector3(0.14, 0.16, 0.14), Color(0.82, 0.68, 0.55))
 	_add_box(st, Vector3(0, 1.48, 0), Vector3(0.28, 0.28, 0.28), Color(0.82, 0.68, 0.55))
 	_add_box(st, Vector3(0, 1.6, 0), Vector3(0.32, 0.16, 0.32), Color(0.25, 0.32, 0.2))
-	_add_box(st, Vector3(-0.38, 0.9, 0), Vector3(0.14, 0.45, 0.14), Color(0.22, 0.38, 0.58))
-	_add_box(st, Vector3(0.38, 0.9, 0), Vector3(0.14, 0.45, 0.14), Color(0.22, 0.38, 0.58))
-	_add_box(st, Vector3(-0.38, 0.62, 0), Vector3(0.1, 0.12, 0.1), Color(0.82, 0.68, 0.55))
-	_add_box(st, Vector3(0.38, 0.62, 0), Vector3(0.1, 0.12, 0.1), Color(0.82, 0.68, 0.55))
-	_add_box(st, Vector3(-0.13, 0.42, 0), Vector3(0.16, 0.5, 0.16), Color(0.2, 0.28, 0.18))
-	_add_box(st, Vector3(0.13, 0.42, 0), Vector3(0.16, 0.5, 0.16), Color(0.2, 0.28, 0.18))
-	_add_box(st, Vector3(-0.13, 0.12, -0.02), Vector3(0.17, 0.14, 0.22), Color(0.18, 0.15, 0.12))
-	_add_box(st, Vector3(0.13, 0.12, -0.02), Vector3(0.17, 0.14, 0.22), Color(0.18, 0.15, 0.12))
+	_add_box(st, Vector3(-0.31, 0.9, 0), Vector3(0.14, 0.45, 0.14), Color(0.22, 0.38, 0.58))
+	_add_box(st, Vector3(0.31, 0.9, 0), Vector3(0.14, 0.45, 0.14), Color(0.22, 0.38, 0.58))
+	_add_box(st, Vector3(-0.31, 0.62, 0), Vector3(0.1, 0.12, 0.1), Color(0.82, 0.68, 0.55))
+	_add_box(st, Vector3(0.31, 0.62, 0), Vector3(0.1, 0.12, 0.1), Color(0.82, 0.68, 0.55))
+	_add_box(st, Vector3(-0.13, 0.425, 0), Vector3(0.16, 0.5, 0.16), Color(0.2, 0.28, 0.18))
+	_add_box(st, Vector3(0.13, 0.425, 0), Vector3(0.16, 0.5, 0.16), Color(0.2, 0.28, 0.18))
+	_add_box(st, Vector3(-0.13, 0.10, -0.02), Vector3(0.17, 0.20, 0.22), Color(0.18, 0.15, 0.12))
+	_add_box(st, Vector3(0.13, 0.10, -0.02), Vector3(0.17, 0.20, 0.22), Color(0.18, 0.15, 0.12))
 
-	st.generate_normals()
 	return st.commit()
 
 
@@ -38,12 +38,11 @@ static func make_rifle() -> ArrayMesh:
 
 	_add_box(st, Vector3(0, 0, -0.35), Vector3(0.04, 0.04, 0.35), metal)
 	_add_box(st, Vector3(0, -0.01, -0.05), Vector3(0.06, 0.07, 0.25), metal)
-	_add_box(st, Vector3(0, -0.04, 0.18), Vector3(0.05, 0.04, 0.18), wood)
+	_add_box(st, Vector3(0, -0.04, 0.165), Vector3(0.05, 0.04, 0.18), wood)
 	_add_box(st, Vector3(0, -0.08, -0.1), Vector3(0.035, 0.1, 0.06), dark)
 	_add_box(st, Vector3(0, 0.03, -0.08), Vector3(0.025, 0.025, 0.06), metal)
 	_add_box(st, Vector3(0, 0, -0.52), Vector3(0.015, 0.035, 0.02), metal)
 
-	st.generate_normals()
 	return st.commit()
 
 
@@ -56,6 +55,7 @@ static func make_terrain(size: float, resolution: int, seed_val: int) -> ArrayMe
 
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.set_smooth_group(-1)
 
 	var half := size / 2.0
 	var step := size / resolution
@@ -140,7 +140,11 @@ static func outline_material(color: Color = Color(0.05, 0.05, 0.08), width: floa
 static func add_outline_to_mesh(mesh_instance: MeshInstance3D, color: Color = Color(0.05, 0.05, 0.08), width: float = 0.07) -> MeshInstance3D:
 	# Создаёт дочерний MeshInstance3D с outline шейдером (inverted hull)
 	var outline := MeshInstance3D.new()
-	outline.mesh = mesh_instance.mesh
+	# Общие нормали в углах замыкают оболочку без разрывов между гранями.
+	var outline_surface := SurfaceTool.new()
+	outline_surface.create_from(mesh_instance.mesh, 0)
+	outline_surface.generate_normals()
+	outline.mesh = outline_surface.commit()
 	outline.set_surface_override_material(0, outline_material(color, width))
 	outline.name = mesh_instance.name + "Outline"
 	mesh_instance.add_child(outline)
@@ -174,17 +178,17 @@ static func _add_box(st: SurfaceTool, center: Vector3, size: Vector3, color: Col
 		st.add_vertex(center + face[0])
 		st.set_normal(normal)
 		st.set_color(color)
-		st.add_vertex(center + face[1])
+		st.add_vertex(center + face[2])
 		st.set_normal(normal)
 		st.set_color(color)
-		st.add_vertex(center + face[2])
+		st.add_vertex(center + face[1])
 
 		st.set_normal(normal)
 		st.set_color(color)
 		st.add_vertex(center + face[0])
 		st.set_normal(normal)
 		st.set_color(color)
-		st.add_vertex(center + face[2])
+		st.add_vertex(center + face[3])
 		st.set_normal(normal)
 		st.set_color(color)
-		st.add_vertex(center + face[3])
+		st.add_vertex(center + face[2])

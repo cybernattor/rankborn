@@ -11,16 +11,9 @@ extends Node3D
 
 var player_scene := preload("res://scenes/shared/player.tscn")
 var local_player_id: int = 1
-var _terrain_noise: FastNoiseLite
 
 
 func _ready() -> void:
-	_terrain_noise = FastNoiseLite.new()
-	_terrain_noise.seed = 42
-	_terrain_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
-	_terrain_noise.frequency = 0.008
-	_terrain_noise.fractal_octaves = 4
-
 	_build_lowpoly_terrain()
 
 	var sun := $DirectionalLight3D
@@ -74,16 +67,6 @@ func _build_lowpoly_terrain() -> void:
 	col.shape = terrain_collision
 	ground_body.add_child(col)
 
-	var safety_floor := StaticBody3D.new()
-	safety_floor.name = "TerrainSafetyFloor"
-	var safety_collision := CollisionShape3D.new()
-	var safety_shape := BoxShape3D.new()
-	safety_shape.size = Vector3(100.0, 2.0, 100.0)
-	safety_collision.shape = safety_shape
-	safety_floor.position = Vector3(0.0, -14.0, 0.0)
-	safety_floor.add_child(safety_collision)
-	add_child(safety_floor)
-
 
 func _on_player_connected(id: int) -> void:
 	_spawn_player(id)
@@ -100,9 +83,8 @@ func _spawn_player(id: int) -> void:
 
 	var player := player_scene.instantiate()
 	player.name = str(id)
-	players_node.add_child(player, true)
 	player.set_multiplayer_authority(id)
-	_propagate_authority(player, id)
+	players_node.add_child(player, true)
 
 	var spawn_pos := _get_spawn_position(id)
 	player.global_position = spawn_pos
@@ -118,21 +100,13 @@ func _spawn_player(id: int) -> void:
 
 
 func _get_spawn_position(id: int) -> Vector3:
-	# Identical deterministic slots are used by host and every client.
-	# This avoids race-dependent or overlapping spawns during peer sync.
-	var spawn_slots := [
-		Vector2(-38.0, -38.0),
-		Vector2(38.0, -38.0),
-		Vector2(-38.0, 38.0),
-		Vector2(38.0, 38.0),
-		Vector2(0.0, -46.0),
-		Vector2(0.0, 46.0),
-	]
-	var slot_index := posmod(id - 1, spawn_slots.size())
-	var slot: Vector2 = spawn_slots[slot_index]
-	var terrain_y := _terrain_noise.get_noise_2d(slot.x, slot.y) * 12.0
-	return Vector3(slot.x, terrain_y + 2.4, slot.y)
-# --- Mobile input routing ---
+	# Хост назначает свободный маркер; координаты задаются в сцене.
+	var slot_index: int = NetworkManager.players.get(id, {}).get("spawn_index", 0)
+	assert(slot_index >= 0 and slot_index < spawn_points.get_child_count())
+	return (spawn_points.get_child(slot_index) as Node3D).global_position
+
+
+# --- Маршрутизация мобильного ввода ---
 
 func _on_mobile_move(vec: Vector2) -> void:
 	_set_input_state("mobile_move", vec)
@@ -160,9 +134,3 @@ func _set_input_state(action: String, value) -> void:
 	var player = players_node.get_node(str(local_player_id))
 	if player.has_method("_on_mobile_input"):
 		player._on_mobile_input(action, value)
-
-
-func _propagate_authority(node: Node, authority_id: int) -> void:
-	for child in node.get_children():
-		child.set_multiplayer_authority(authority_id)
-		_propagate_authority(child, authority_id)

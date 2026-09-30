@@ -18,8 +18,8 @@ uniform float rim_intensity : hint_range(0.0, 1.0) = 0.35;
 uniform float ambient_strength : hint_range(0.0, 1.0) = 0.4;
 
 void fragment() {
-	vec3 ambient = albedo_color.rgb * ambient_strength;
-	ALBEDO = albedo_color.rgb;
+	vec3 base_color = albedo_color.rgb * COLOR.rgb;
+	ALBEDO = base_color;
 	ROUGHNESS = roughness;
 	METALLIC = metallic;
 	
@@ -30,9 +30,6 @@ void fragment() {
 	
 	vec3 rim_light = rim_color.rgb * rim * rim_intensity;
 	
-	EMISSION = rim_light;
-	
-	// Ambient fill — добавляем базовую освещённость для теневых областей
-	// (diffuse_toon может давать чёрный на неосвещённых участках)
-	ALBEDO = max(ALBEDO, ambient);
+	// Минимальная подсветка сохраняет цвет в тени.
+	EMISSION = rim_light + base_color * ambient_strength;
 }

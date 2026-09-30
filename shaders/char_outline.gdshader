@@ -8,7 +8,7 @@ render_mode blend_mix, depth_draw_always, cull_front, unshaded;
 // ============================================================
 
 uniform vec4 outline_color : source_color = vec4(0.05, 0.05, 0.08, 1.0);
-uniform float outline_width : hint_range(0.01, 0.5) = 0.07;
+uniform float outline_width : hint_range(0.001, 0.5) = 0.07;
 
 void vertex() {
 	// Вытягиваем вершину вдоль нормали

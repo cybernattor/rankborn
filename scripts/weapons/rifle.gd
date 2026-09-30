@@ -15,8 +15,6 @@ const SPREAD_ADS := 0.002
 const SPREAD_ADS_FIRING := 0.005
 const SPREAD_HIPFIRE_FIRING := 0.02
 const SPREAD_WALK_FIRING := 0.015
-const SPREAD_PER_SHOT := 0.005
-const SPREAD_ADS_PER_SHOT := 0.002
 
 const SPEED_RUN_THRESHOLD := 4.0
 
@@ -44,6 +42,10 @@ func _ready() -> void:
 	reload_timer.timeout.connect(_on_reload_finished)
 	raycast.enabled = true
 	raycast.collision_mask = 1 | 2
+	raycast.top_level = true
+	var player := _get_player() as CollisionObject3D
+	if player:
+		raycast.add_exception(player)
 	muzzle_light.light_energy = 0.0
 	_base_transform = transform
 
@@ -51,10 +53,10 @@ func _ready() -> void:
 func _build_lowpoly_rifle() -> void:
 	rifle_mesh = MeshInstance3D.new()
 	rifle_mesh.mesh = MeshUtils.make_rifle()
-	rifle_mesh.set_surface_override_material(0, MeshUtils.flat_material(Color(0.15, 0.15, 0.18)))
+	rifle_mesh.set_surface_override_material(0, MeshUtils.flat_material(Color.WHITE))
 	rifle_mesh.position = Vector3(0, 0, -0.25)
 	add_child(rifle_mesh)
-	MeshUtils.add_outline_to_mesh(rifle_mesh, Color(0.05, 0.05, 0.08), 0.04)
+	MeshUtils.add_outline_to_mesh(rifle_mesh, Color(0.05, 0.05, 0.08), 0.004)
 
 
 func _process(delta: float) -> void:
@@ -68,12 +70,10 @@ func _process(delta: float) -> void:
 			return
 
 	# Проверка ввода стрельбы
-		var shoot_pressed := false
-		if OS.get_name() == "Android":
-				shoot_pressed = player != null and bool(player.get("mobile_shoot_pressed"))
-		else:
-				shoot_pressed = Input.is_action_pressed("shoot")
-	if shoot_pressed and can_fire and not is_reloading:
+	var shoot_pressed := Input.is_action_pressed("shoot")
+	if player and player.get("mobile_shoot_pressed"):
+		shoot_pressed = true
+	if shoot_pressed and can_shoot():
 		shoot()
 
 	# Проверка ввода перезарядки
@@ -85,7 +85,7 @@ func _process(delta: float) -> void:
 		reload()
 
 	# Плавное восстановление позиции после отдачи
-	transform = transform.interpolate_with(_base_transform, _recoil_recovery_speed * delta)
+	transform = transform.interpolate_with(_base_transform, 1.0 - exp(-_recoil_recovery_speed * delta))
 
 	# Затухание bloom
 	if bloom_accumulation > 0.0:
@@ -95,38 +95,33 @@ func _process(delta: float) -> void:
 
 
 func shoot() -> void:
-	if current_ammo <= 0:
-		SFXManager.play_empty()
+	# Все пути ввода используют одну проверку, включая WeaponManager.
+	var player := _get_player()
+	if not is_multiplayer_authority() or not can_shoot():
+		return
+	if player and not player.get_node("HealthComponent").is_alive:
 		return
 
 	current_ammo -= 1
 	can_fire = false
 	is_firing = true
+	# Фиксируем луч текущего выстрела до визуальной отдачи.
+	_apply_bullet_spread()
 	SFXManager.play_shoot()
 	_shoot_effects.rpc()
 
 	# Отдача: оружие сдвигается назад и задирается вверх
-	_base_transform = transform
-	translate(Vector3(0, 0, -0.035))
-	rotate_x(-0.01)
+	transform = _base_transform
+	translate(Vector3(0, 0, 0.035))
+	rotate_x(0.01)
 
 	# Отдача камеры
-	var player := _get_player()
 	if player and player.has_method("apply_recoil"):
 		player.apply_recoil(randf_range(0.008, 0.015))
 
-	# Вспышка дула
-	muzzle_light.light_energy = 1.5
-	get_tree().create_timer(0.04).timeout.connect(func():
-		muzzle_light.light_energy = 0.0
-	)
-
-	# Применение разброса
-	_apply_bullet_spread()
-
 	# Трассер
-	var muzzle_pos := raycast.global_position
-	var hit_pos := raycast.get_collision_point() if raycast.is_colliding() else raycast.global_position + raycast.target_position.normalized() * 100.0
+	var muzzle_pos := muzzle_flash.global_position
+	var hit_pos := raycast.get_collision_point() if raycast.is_colliding() else raycast.to_global(raycast.target_position)
 	_spawn_tracer.rpc(muzzle_pos, hit_pos)
 
 	# Hitscan-попадание
@@ -168,6 +163,19 @@ func shoot() -> void:
 
 func _apply_bullet_spread() -> void:
 	var player := _get_player()
+	if not player:
+		return
+	var camera: Camera3D = player.get_node("Head/Camera3D")
+	raycast.global_transform = camera.global_transform
+	var spread := get_spread_angle()
+	var offset := Vector2(randf_range(-spread, spread), randf_range(-spread, spread))
+	raycast.target_position = Vector3(tan(offset.x), tan(offset.y), -1.0).normalized() * 100.0
+	raycast.force_raycast_update()
+
+
+# Разброс в радианах: одна величина для выстрела и экранного прицела.
+func get_spread_angle() -> float:
+	var player := _get_player()
 	var spread := SPREAD_IDLE
 
 	if player:
@@ -184,13 +192,7 @@ func _apply_bullet_spread() -> void:
 			else:
 				spread = SPREAD_HIPFIRE_FIRING if is_firing else SPREAD_IDLE
 
-	spread += bloom_accumulation * 0.5
-
-	var offset := Vector2(
-		randf_range(-spread, spread),
-		randf_range(-spread, spread)
-	)
-	raycast.target_position = Vector3(offset.x, offset.y, -100)
+	return spread + bloom_accumulation * 0.5
 
 
 func _get_damage_with_falloff(distance: float) -> float:
@@ -211,6 +213,8 @@ func _check_headshot(collider: Node, hit_position: Vector3) -> bool:
 
 
 func reload() -> void:
+	if not is_multiplayer_authority() or is_reloading or current_ammo >= magazine_size:
+		return
 	is_reloading = true
 	reload_timer.start()
 
@@ -225,6 +229,10 @@ func _on_reload_finished() -> void:
 func _shoot_effects() -> void:
 	if muzzle_flash:
 		muzzle_flash.restart()
+	muzzle_light.light_energy = 1.5
+	get_tree().create_timer(0.04).timeout.connect(func():
+		muzzle_light.light_energy = 0.0
+	)
 
 
 @rpc("call_local", "reliable")
@@ -238,7 +246,7 @@ func _spawn_impact(pos: Vector3, normal: Vector3) -> void:
 	# --- Искры ---
 	var sparks := GPUParticles3D.new()
 	var spark_pm := ParticleProcessMaterial.new()
-	spark_pm.direction = -normal
+	spark_pm.direction = normal
 	spark_pm.spread = 45.0 if is_ground else 30.0
 	spark_pm.initial_velocity_min = 3.0 if is_ground else 5.0
 	spark_pm.initial_velocity_max = 6.0 if is_ground else 10.0
@@ -275,7 +283,7 @@ func _spawn_impact(pos: Vector3, normal: Vector3) -> void:
 	# --- Пылевое облако ---
 	var dust := GPUParticles3D.new()
 	var dust_pm := ParticleProcessMaterial.new()
-	dust_pm.direction = -normal
+	dust_pm.direction = normal
 	dust_pm.spread = 70.0 if is_ground else 50.0
 	dust_pm.initial_velocity_min = 0.8 if is_ground else 1.2
 	dust_pm.initial_velocity_max = 2.0 if is_ground else 3.0
@@ -322,6 +330,7 @@ func _spawn_impact(pos: Vector3, normal: Vector3) -> void:
 	quad.material = scorch_mat
 	scorch.mesh = quad
 	scorch.position = pos + normal * 0.003
+	root.add_child(scorch)
 	if normal.length_squared() > 0.01:
 		var up := Vector3.UP
 		if absf(normal.dot(up)) > 0.99:
@@ -335,7 +344,6 @@ func _spawn_impact(pos: Vector3, normal: Vector3) -> void:
 		if is_instance_valid(oldest):
 			oldest.queue_free()
 
-	root.add_child(scorch)
 	get_tree().create_timer(30.0).timeout.connect(func():
 		if is_instance_valid(scorch):
 			_scorch_marks.erase(scorch)
@@ -381,9 +389,10 @@ func _spawn_tracer(muzzle_pos: Vector3, hit_pos: Vector3) -> void:
 	var tracer := MeshInstance3D.new()
 	tracer.mesh = tracer_mesh
 	tracer.position = (muzzle_pos + hit_pos) / 2.0
-	tracer.look_at(hit_pos, Vector3.UP)
-
 	root.add_child(tracer)
+	var direction := (hit_pos - muzzle_pos).normalized()
+	var up := Vector3.FORWARD if absf(direction.dot(Vector3.UP)) > 0.99 else Vector3.UP
+	tracer.look_at(hit_pos, up)
 	get_tree().create_timer(0.08).timeout.connect(func():
 		if is_instance_valid(tracer):
 			tracer.queue_free()

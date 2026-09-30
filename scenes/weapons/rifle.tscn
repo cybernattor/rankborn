@@ -22,7 +22,7 @@ script = ExtResource("1")
 target_position = Vector3(0, 0, -100)
 
 [node name="MuzzleFlash" type="GPUParticles3D" parent="." unique_id=1539696234]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.55)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.78)
 emitting = false
 amount = 6
 lifetime = 0.06
@@ -33,7 +33,7 @@ process_material = SubResource("ParticleProcessMaterial_muzzle")
 draw_pass_1 = SubResource("BoxMesh_particle")
 
 [node name="MuzzleLight" type="OmniLight3D" parent="." unique_id=1902246483]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.6)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.78)
 light_color = Color(1, 0.8, 0.4, 1)
 light_energy = 0.0
 omni_range = 3.0

@@ -131,31 +131,12 @@ func _calculate_spread() -> float:
 	if not weapon:
 		return 0.0
 
-	var spread := 0.0
-	var velocity: Vector3 = _player.velocity if "velocity" in _player else Vector3.ZERO
-	var speed := Vector2(velocity.x, velocity.z).length()
-	var is_aiming: bool = _player.is_aiming if "is_aiming" in _player else false
-
-	if is_aiming:
-		spread = 0.3
-		if weapon.is_firing:
-			spread = 0.5
-	elif speed > 1.0:
-		if speed > 4.0:
-			spread = 3.0
-		else:
-			spread = 1.5
-	else:
-		spread = 0.5
-
-	if weapon.is_firing:
-		spread += 2.0
-
-	# Bloom (если есть)
-	if "bloom_accumulation" in weapon:
-		spread += weapon.bloom_accumulation * 20.0
-
-	return spread
+	if not weapon is Rifle:
+		return 0.0
+	var camera: Camera3D = _player.get_node("Head/Camera3D")
+	var half_height := get_viewport().get_visible_rect().size.y * 0.5
+	var focal_length := half_height / tan(deg_to_rad(camera.fov) * 0.5)
+	return maxf(0.0, tan(weapon.get_spread_angle()) * focal_length - BASE_GAP)
 
 
 func _set_scope_visible(show_scope: bool) -> void:
