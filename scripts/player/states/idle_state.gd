@@ -1,7 +1,7 @@
 extends PlayerState
 class_name IdleState
 
-## Состояние покоя: игрок стоит на месте, ждёт ввода.
+## Состояние покоя: игрок стоит на месте (тормозит по инерции), ждёт ввода.
 
 
 func physics_update(delta: float) -> void:
@@ -9,22 +9,15 @@ func physics_update(delta: float) -> void:
 		return
 
 	_apply_gravity(delta)
-
-	# Прыжок
-	if Input.is_action_just_pressed("ui_accept") and player.is_on_floor():
-		player.velocity.y = JUMP_VELOCITY
-		transitioned.emit("JumpState")
+	if _try_jump():
+		return
 
 	# Движение — если есть ввод, переходим в Walk
-	var input_dir := _get_input_vector()
-	if input_dir.length() > 0.1:
+	if _get_input_vector().length() > 0.1:
 		transitioned.emit("WalkState")
 		return
 
-	# Гасим горизонтальную скорость
-	player.velocity.x = move_toward(player.velocity.x, 0, SPEED)
-	player.velocity.z = move_toward(player.velocity.z, 0, SPEED)
-
+	_apply_horizontal(Vector2.ZERO, GROUND_DECEL, delta)
 	player.move_and_slide()
 
 	# Стрельба/перезарядка

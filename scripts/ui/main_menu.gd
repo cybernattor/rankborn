@@ -22,7 +22,6 @@ var _create_section: PanelContainer
 var _join_section: PanelContainer
 var _main_vbox: VBoxContainer
 var _is_mobile: bool = false
-const MOBILE_WIDTH_THRESHOLD := 768.0
 
 
 func _ready() -> void:
@@ -69,14 +68,23 @@ func _ready() -> void:
 	_on_games_updated(LanDiscovery.get_games())
 
 
+func _notification(what: int) -> void:
+	# Кнопка «Назад» на Android работает как кнопка «Выход»
+	# (quit_on_go_back выключен ради меню паузы в матче).
+	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
+		_on_exit_pressed()
+
+
 func _exit_tree() -> void:
 	if not _in_lobby:
 		LanDiscovery.stop()
 
 
 func _handle_resize() -> void:
+	# При stretch canvas_items/expand короткая сторона viewport всегда базовая,
+	# поэтому сравнивать ширину с порогом бессмысленно — смотрим на ориентацию.
 	var viewport_size := get_viewport_rect().size
-	var should_be_mobile := viewport_size.x < MOBILE_WIDTH_THRESHOLD
+	var should_be_mobile := viewport_size.x < viewport_size.y
 
 	if should_be_mobile == _is_mobile:
 		return

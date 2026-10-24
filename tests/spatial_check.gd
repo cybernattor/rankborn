@@ -203,6 +203,17 @@ func _check_network(network: Node, mode: String) -> void:
 	_check(own.camera.current and not remote.camera.current)
 	_check(own.body_mesh.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY and remote.body_mesh.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_ON)
 	_check(own.spawn_position.distance_to(remote.spawn_position) > 1.0)
+	# Присед хоста виден клиенту, и капсула меняется только у присевшего.
+	if mode == "host":
+		Input.action_press("crouch")
+		await create_timer(0.3).timeout
+		Input.action_release("crouch")
+	else:
+		while not remote.is_crouching:
+			await process_frame
+		await process_frame
+		_check(is_equal_approx(remote.collision_shape.shape.height, remote.CROUCH_HEIGHT), "Присед не синхронизируется по сети")
+		_check(is_equal_approx(own.collision_shape.shape.height, own.STAND_HEIGHT), "Присед одного игрока меняет капсулу другого")
 	if mode == "host":
 		own.health_component.take_damage(9999.0, remote_id)
 	else:

@@ -82,6 +82,7 @@ offset_top = -2.0
 offset_right = 2.0
 offset_bottom = 2.0
 theme_override_styles/panel = SubResource("StyleBoxFlat_dot")
+mouse_filter = 2
 
 [node name="CrossTop" type="ColorRect" parent="UILayer/Crosshair"]
 layout_mode = 0
@@ -90,6 +91,7 @@ offset_top = -7.0
 offset_right = 0.5
 offset_bottom = -3.0
 color = Color(1, 1, 1, 0.8)
+mouse_filter = 2
 
 [node name="CrossBottom" type="ColorRect" parent="UILayer/Crosshair"]
 layout_mode = 0
@@ -98,6 +100,7 @@ offset_top = 3.0
 offset_right = 0.5
 offset_bottom = 7.0
 color = Color(1, 1, 1, 0.8)
+mouse_filter = 2
 
 [node name="CrossLeft" type="ColorRect" parent="UILayer/Crosshair"]
 layout_mode = 0
@@ -106,6 +109,7 @@ offset_top = -0.5
 offset_right = -3.0
 offset_bottom = 0.5
 color = Color(1, 1, 1, 0.8)
+mouse_filter = 2
 
 [node name="CrossRight" type="ColorRect" parent="UILayer/Crosshair"]
 layout_mode = 0
@@ -114,6 +118,7 @@ offset_top = -0.5
 offset_right = 7.0
 offset_bottom = 0.5
 color = Color(1, 1, 1, 0.8)
+mouse_filter = 2
 
 [node name="HitMarker" type="Control" parent="UILayer"]
 anchors_preset = 8
@@ -133,6 +138,7 @@ offset_top = -8.0
 offset_right = -3.0
 offset_bottom = -3.0
 color = Color(1, 1, 1, 0.9)
+mouse_filter = 2
 
 [node name="Line2" type="ColorRect" parent="UILayer/HitMarker"]
 layout_mode = 0
@@ -141,6 +147,7 @@ offset_top = -8.0
 offset_right = 8.0
 offset_bottom = -3.0
 color = Color(1, 1, 1, 0.9)
+mouse_filter = 2
 
 [node name="Line3" type="ColorRect" parent="UILayer/HitMarker"]
 layout_mode = 0
@@ -149,6 +156,7 @@ offset_top = 3.0
 offset_right = -3.0
 offset_bottom = 8.0
 color = Color(1, 1, 1, 0.9)
+mouse_filter = 2
 
 [node name="Line4" type="ColorRect" parent="UILayer/HitMarker"]
 layout_mode = 0
@@ -157,6 +165,7 @@ offset_top = 3.0
 offset_right = 8.0
 offset_bottom = 8.0
 color = Color(1, 1, 1, 0.9)
+mouse_filter = 2
 
 [node name="BottomRight" type="Control" parent="UILayer"]
 anchors_preset = 3
@@ -170,6 +179,7 @@ offset_right = -20.0
 offset_bottom = -20.0
 grow_horizontal = 0
 grow_vertical = 0
+mouse_filter = 2
 
 [node name="AmmoLabel" type="Label" parent="UILayer/BottomRight"]
 layout_mode = 0
@@ -182,6 +192,7 @@ vertical_alignment = 2
 theme_override_colors/font_color = Color(1, 1, 1, 0.9)
 theme_override_font_sizes/font_size = 28
 text = "30 / 30"
+mouse_filter = 2
 
 [node name="ReloadBar" type="ProgressBar" parent="UILayer/BottomRight"]
 layout_mode = 0
@@ -194,6 +205,7 @@ theme_override_styles/fill = SubResource("StyleBoxFlat_reload_fill")
 max_value = 100.0
 value = 0.0
 show_percentage = false
+mouse_filter = 2
 
 [node name="ScopeOverlay" type="ColorRect" parent="UILayer"]
 anchors_preset = 15

@@ -57,7 +57,12 @@ LAN discovery is broadcast-based (port 7001). Instances on the same machine disc
 
 ## Mobile support
 
-Touch input is routed through `MobileUI` → `game_scene.gd` → `player_controller.gd`'s `_on_mobile_input()`. Virtual joysticks handle movement and look. The `MobileUI` scene is toggled based on `DisplayServer.is_touchscreen_available()`.
+All input goes through Input actions (`move_*`, `shoot`, `aim`, `jump`, `crouch`, `sprint`, `reload`, `pause`, `look_*`). `MobileUI` (`scripts/ui/mobile_ui.gd`) presses the same actions via `Input.action_press`, so states read one input path for keyboard, gamepad and touch. Only the camera swipe (`look_drag` → `player.apply_touch_look`) and the pause button go through signals.
+
+- Layout: floating stick in the bottom-left half (full forward = sprint), swipe anywhere free to look, right FIRE also looks while dragged, left FIRE duplicate, AIM/DUCK are toggles on touch.
+- `MobileUI` is active when `GameSettings.is_touch_device()` (mobile/web-mobile features, or `force_touch` for testing on PC).
+- `input_devices/pointing/emulate_mouse_from_touch=false`: otherwise every touch is an emulated left click and fires the gun. GUI controls still receive touches natively.
+- `application/config/quit_on_go_back=false`: Android Back toggles the pause menu in a match.
 
 ## Gotchas
 
@@ -67,6 +72,10 @@ Touch input is routed through `MobileUI` → `game_scene.gd` → `player_control
 - `data/` and `resources/` do not exist yet — SQLite persistence is not implemented
 - The `addons/godot_mcp` plugin is enabled (Godot MCP integration for AI tools)
 - There is no CI, linting, or typecheck pipeline. Headless check: `godot --headless --path . --script tests/spatial_check.gd` (network: run two processes with `-- host` and `-- client`)
+- Input check needs a real display (GUI gets no events in `--headless`): `xvfb-run -a godot --path . --rendering-driver opengl3 --script tests/input_check.gd`
+- Mouse look lives in `_input`, not `_unhandled_input`: with a captured cursor it sits at screen centre, and any HUD control there would swallow motion. HUD controls must stay `mouse_filter = IGNORE`
+- Pause never sets `get_tree().paused` (network game keeps running); the menu sets `player.input_blocked`
+- Player collision shape is duplicated per instance in `_ready` — crouch changes its height
 - Movement states (Idle/Walk/Jump) extend `PlayerState`; shooting/reload input is polled only there via `WeaponManager`, not in the weapon
 - Lighting, fog and sun live in `game_scene.tscn`, not in code; `GroundBody` has no shape in the scene — its only collision is the terrain trimesh built at runtime
 

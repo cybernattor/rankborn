@@ -29,13 +29,12 @@ func _ready() -> void:
 	if not players_node.has_node(str(my_id)):
 		_spawn_player(my_id)
 
-	# Mobile UI: подключаем сигналы
-	if mobile_ui:
-		mobile_ui.move_input.connect(_on_mobile_move)
-		mobile_ui.look_input.connect(_on_mobile_look)
-		mobile_ui.shoot_input.connect(_on_mobile_shoot)
-		mobile_ui.reload_input.connect(_on_mobile_reload)
-		mobile_ui.interact_input.connect(_on_mobile_interact)
+	# Движение/стрельбу MobileUI нажимает через Input-действия сам;
+	# сюда приходят только свайп камеры и кнопка паузы.
+	mobile_ui.look_drag.connect(_on_mobile_look)
+	mobile_ui.pause_pressed.connect(pause_menu.toggle)
+	pause_menu.visibility_changed.connect(_on_pause_visibility_changed)
+	_bind_local_player_ui()
 
 
 func _build_lowpoly_terrain() -> void:
@@ -92,31 +91,31 @@ func _get_spawn_position(id: int) -> Vector3:
 	return (spawn_points.get_child(slot_index) as Node3D).global_position
 
 
-# --- Маршрутизация мобильного ввода ---
+# --- Ввод и меню ---
 
-func _on_mobile_move(vec: Vector2) -> void:
-	_set_input_state("mobile_move", vec)
-
-
-func _on_mobile_look(vec: Vector2) -> void:
-	_set_input_state("mobile_look", vec)
+func _notification(what: int) -> void:
+	# Кнопка «Назад» на Android открывает/закрывает меню вместо выхода из игры.
+	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
+		pause_menu.toggle()
 
 
-func _on_mobile_shoot(pressed: bool) -> void:
-	_set_input_state("mobile_shoot", pressed)
+func _get_local_player() -> Node:
+	return players_node.get_node_or_null(str(local_player_id))
 
 
-func _on_mobile_reload() -> void:
-	_set_input_state("mobile_reload", true)
+func _bind_local_player_ui() -> void:
+	mobile_ui.player = _get_local_player()
 
 
-func _on_mobile_interact() -> void:
-	_set_input_state("mobile_interact", true)
+func _on_mobile_look(delta: Vector2) -> void:
+	var player := _get_local_player()
+	if player:
+		player.apply_touch_look(delta)
 
 
-func _set_input_state(action: String, value) -> void:
-	if not players_node.has_node(str(local_player_id)):
-		return
-	var player = players_node.get_node(str(local_player_id))
-	if player.has_method("_on_mobile_input"):
-		player._on_mobile_input(action, value)
+# Пауза в сетевой игре не останавливает мир — только блокирует ввод.
+func _on_pause_visibility_changed() -> void:
+	var player := _get_local_player()
+	if player:
+		player.input_blocked = pause_menu.visible
+	mobile_ui.set_active(GameSettings.is_touch_device() and not pause_menu.visible)

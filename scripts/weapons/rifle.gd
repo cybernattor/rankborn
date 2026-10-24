@@ -192,8 +192,9 @@ func _get_damage_with_falloff(distance: float) -> float:
 func _check_headshot(collider: Node, hit_position: Vector3) -> bool:
 	if not collider is CharacterBody3D:
 		return false
-	var capsule_height: float = 1.8
-	var head_threshold: float = collider.global_position.y + capsule_height * 0.75
+	# Рост меняется при приседании — берём текущий у самого игрока.
+	var body_height: float = collider.get_body_height() if collider.has_method("get_body_height") else 1.8
+	var head_threshold: float = collider.global_position.y + body_height * 0.75
 	return hit_position.y > head_threshold
 
 
