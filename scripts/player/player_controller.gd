@@ -12,10 +12,8 @@ const MOUSE_SENSITIVITY := 0.002
 @onready var weapon_manager: WeaponManager = $WeaponManager
 @onready var health_component: HealthComponent = $HealthComponent
 
-# Меши тела (именованные, доступны из State)
+# Меш тела (именованный, доступен из State)
 var body_mesh: MeshInstance3D
-var left_arm: MeshInstance3D
-var right_arm: MeshInstance3D
 
 var spawn_position: Vector3 = Vector3.ZERO
 
@@ -44,19 +42,14 @@ func _ready() -> void:
 	if is_multiplayer_authority():
 		camera.current = true
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
-		body_mesh.visible = false
-		if left_arm:
-			left_arm.visible = false
-		if right_arm:
-			right_arm.visible = false
+		# Своё тело не рисуем (камера внутри головы), но тень от него оставляем.
+		body_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY
 		_setup_weapon_hud()
 
 		# Подключаем смерть → StateMachine
 		health_component.died.connect(_on_died)
 	else:
 		camera.current = false
-		left_arm.visible = false
-		right_arm.visible = false
 	_on_life_state_changed(health_component.is_alive)
 
 
@@ -69,20 +62,6 @@ func _build_lowpoly_body() -> void:
 	body_mesh.mesh = humanoid_mesh
 	body_mesh.set_surface_override_material(0, mat)
 	add_child(body_mesh)
-
-	left_arm = MeshInstance3D.new()
-	left_arm.name = "LeftArm"
-	left_arm.mesh = MeshUtils.make_box(Vector3(0.14, 0.45, 0.14), Color(0.22, 0.38, 0.58))
-	left_arm.set_surface_override_material(0, MeshUtils.flat_material(Color.WHITE))
-	left_arm.position = Vector3(-0.3, -0.3, -0.5)
-	camera.add_child(left_arm)
-
-	right_arm = MeshInstance3D.new()
-	right_arm.name = "RightArm"
-	right_arm.mesh = MeshUtils.make_box(Vector3(0.14, 0.45, 0.14), Color(0.22, 0.38, 0.58))
-	right_arm.set_surface_override_material(0, MeshUtils.flat_material(Color.WHITE))
-	right_arm.position = Vector3(0.3, -0.3, -0.5)
-	camera.add_child(right_arm)
 
 
 func _setup_weapon_hud() -> void:

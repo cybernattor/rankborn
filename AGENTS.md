@@ -63,10 +63,16 @@ Touch input is routed through `MobileUI` → `game_scene.gd` → `player_control
 
 - Player mesh is built procedurally in `_build_lowpoly_body()` — no external 3D models for players
 - Spawn positions are deterministic: `absi(peer_id) % spawn_count`
-- Body mesh is hidden for the local player (first-person), visible for remote players (third-person view of others)
-- `data/` directory exists but is empty — SQLite persistence is not implemented yet
+- Local player body is rendered shadows-only (`cast_shadow = SHADOWS_ONLY`), fully visible for remote players
+- `data/` and `resources/` do not exist yet — SQLite persistence is not implemented
 - The `addons/godot_mcp` plugin is enabled (Godot MCP integration for AI tools)
-- There is no CI, linting, or typecheck pipeline — validation is manual in-editor
+- There is no CI, linting, or typecheck pipeline. Headless check: `godot --headless --path . --script tests/spatial_check.gd` (network: run two processes with `-- host` and `-- client`)
+- Movement states (Idle/Walk/Jump) extend `PlayerState`; shooting/reload input is polled only there via `WeaponManager`, not in the weapon
+- Lighting, fog and sun live in `game_scene.tscn`, not in code; `GroundBody` has no shape in the scene — its only collision is the terrain trimesh built at runtime
+
+## Design reference
+
+The meta-game (front line, logistics, trenches, hierarchy) is based on **Foxhole**; Rankborn's difference is FPS combat, a modular weapon designer and PC + mobile crossplay. See `README.md`.
 
 ## Reference
 

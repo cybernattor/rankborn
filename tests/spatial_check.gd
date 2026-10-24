@@ -32,7 +32,7 @@ func _run() -> void:
 	var player: CharacterBody3D = world.get_node("Players/1")
 	var remote: CharacterBody3D = world.get_node("Players/7")
 	_check(player.camera.current and not remote.camera.current)
-	_check(not player.body_mesh.visible and remote.body_mesh.visible)
+	_check(player.body_mesh.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY and remote.body_mesh.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_ON)
 	var hud: CanvasLayer = player.get_node("WeaponHUD")
 	_check(hud.crosshair.global_position.is_equal_approx(root.get_visible_rect().size * 0.5), "Прицел смещён относительно центра камеры")
 	for spawn: Marker3D in world.get_node("SpawnPoints").get_children():
@@ -71,7 +71,7 @@ func _run() -> void:
 	_check(world.game_mode.get_score(1).deaths == 1)
 	await create_timer(2.2).timeout
 	_check(player.visible and not player.get_node("CollisionShape3D").disabled)
-	_check(not player.body_mesh.visible and player.health_component.is_alive)
+	_check(player.body_mesh.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY and player.health_component.is_alive)
 	player.global_position = Vector3(0, -20, 0)
 	await create_timer(0.15).timeout
 	_check(not player.health_component.is_alive, "Зона смерти не обнаруживает упавшего игрока")
@@ -176,6 +176,8 @@ func _check_shots(world: Node3D, player: CharacterBody3D, rifle: Node3D) -> void
 	rifle._spawn_impact(origin, Vector3.UP)
 	var scorch: MeshInstance3D = rifle._scorch_marks.back()
 	_check(scorch.global_basis.z.dot(Vector3.UP) > 0.999)
+	rifle._spawn_impact(origin, Vector3.UP)
+	_check(rifle._scorch_marks.back().mesh == scorch.mesh, "Ресурсы эффектов попадания пересоздаются на каждый выстрел")
 	rifle._spawn_blood(origin, Vector3.UP)
 	var blood: Node3D = world.get_child(world.get_child_count() - 1)
 	_check(blood.get_node("BloodDrops") is GPUParticles3D and blood.get_node("BloodMist") is GPUParticles3D)
@@ -199,7 +201,7 @@ func _check_network(network: Node, mode: String) -> void:
 	var remote_id: int = ids[0] if ids[0] != own_id else ids[1]
 	var remote: CharacterBody3D = world.get_node("Players/%d" % remote_id)
 	_check(own.camera.current and not remote.camera.current)
-	_check(not own.body_mesh.visible and remote.body_mesh.visible)
+	_check(own.body_mesh.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY and remote.body_mesh.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_ON)
 	_check(own.spawn_position.distance_to(remote.spawn_position) > 1.0)
 	if mode == "host":
 		own.health_component.take_damage(9999.0, remote_id)

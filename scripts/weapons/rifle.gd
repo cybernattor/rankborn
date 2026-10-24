@@ -16,7 +16,8 @@ const SPREAD_ADS_FIRING := 0.005
 const SPREAD_HIPFIRE_FIRING := 0.02
 const SPREAD_WALK_FIRING := 0.015
 
-const SPEED_RUN_THRESHOLD := 4.0
+# Выше скорости ходьбы (PlayerState.SPEED): бег появится вместе со спринтом.
+const SPEED_RUN_THRESHOLD := PlayerState.SPEED + 0.5
 
 var bloom_accumulation: float = 0.0
 
@@ -32,6 +33,10 @@ var _recoil_recovery_speed := 12.0
 
 var _scorch_marks: Array[MeshInstance3D] = []
 const MAX_SCORCH_MARKS := 50
+
+# Меши и материалы эффектов попадания общие для всех выстрелов:
+# создаются один раз, а не на каждое попадание.
+static var _impact_assets: Dictionary = {}
 
 
 func _ready() -> void:
@@ -62,27 +67,7 @@ func _build_lowpoly_rifle() -> void:
 func _process(delta: float) -> void:
 	if not is_multiplayer_authority():
 		return
-
-	var player := _get_player()
-	if player:
-		var health: HealthComponent = player.get_node_or_null("HealthComponent")
-		if health and not health.is_alive:
-			return
-
-	# Проверка ввода стрельбы
-	var shoot_pressed := Input.is_action_pressed("shoot")
-	if player and player.get("mobile_shoot_pressed"):
-		shoot_pressed = true
-	if shoot_pressed and can_shoot():
-		shoot()
-
-	# Проверка ввода перезарядки
-	var reload_pressed := Input.is_action_just_pressed("reload")
-	if player and player.get("mobile_reload_triggered"):
-		reload_pressed = true
-		player.mobile_reload_triggered = false
-	if reload_pressed and not is_reloading and current_ammo < magazine_size:
-		reload()
+	# Ввод стрельбы/перезарядки опрашивают стейты игрока через WeaponManager.
 
 	# Плавное восстановление позиции после отдачи
 	transform = transform.interpolate_with(_base_transform, 1.0 - exp(-_recoil_recovery_speed * delta))
@@ -225,7 +210,7 @@ func _on_reload_finished() -> void:
 	reloaded.emit()
 
 
-@rpc("call_local", "reliable")
+@rpc("call_local", "unreliable")
 func _shoot_effects() -> void:
 	if muzzle_flash:
 		muzzle_flash.restart()
@@ -235,13 +220,14 @@ func _shoot_effects() -> void:
 	)
 
 
-@rpc("call_local", "reliable")
+@rpc("call_local", "unreliable")
 func _spawn_impact(pos: Vector3, normal: Vector3) -> void:
 	var root := get_tree().current_scene
 	if not root:
 		return
 
 	var is_ground := normal.y > 0.7
+	var assets := _get_impact_assets(is_ground)
 
 	# --- Искры ---
 	var sparks := GPUParticles3D.new()
@@ -262,17 +248,7 @@ func _spawn_impact(pos: Vector3, normal: Vector3) -> void:
 	sparks.explosiveness = 1.0
 	sparks.emitting = true
 	sparks.position = pos + normal * 0.05
-
-	var spark_mesh := BoxMesh.new()
-	spark_mesh.size = Vector3(0.025, 0.025, 0.025)
-	sparks.draw_pass_1 = spark_mesh
-
-	var spark_mat := StandardMaterial3D.new()
-	spark_mat.albedo_color = Color(1.0, 0.85, 0.3) if is_ground else Color(1.0, 0.9, 0.6)
-	spark_mat.emission_enabled = true
-	spark_mat.emission = Color(1.0, 0.8, 0.2) if is_ground else Color(1.0, 0.9, 0.5)
-	spark_mat.emission_energy_multiplier = 8.0 if is_ground else 12.0
-	sparks.draw_pass_1.material = spark_mat
+	sparks.draw_pass_1 = assets.spark_mesh
 
 	root.add_child(sparks)
 	get_tree().create_timer(0.5).timeout.connect(func():
@@ -299,17 +275,7 @@ func _spawn_impact(pos: Vector3, normal: Vector3) -> void:
 	dust.explosiveness = 1.0
 	dust.emitting = true
 	dust.position = pos + normal * 0.04
-
-	var dust_mesh := BoxMesh.new()
-	dust_mesh.size = Vector3(0.04, 0.04, 0.04)
-	dust.draw_pass_1 = dust_mesh
-
-	var dust_mat := StandardMaterial3D.new()
-	dust_mat.albedo_color = Color(0.92, 0.87, 0.78) if is_ground else Color(0.82, 0.80, 0.76)
-	dust_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	dust_mat.albedo_color.a = 0.5
-	dust_mat.roughness = 1.0
-	dust.draw_pass_1.material = dust_mat
+	dust.draw_pass_1 = assets.dust_mesh
 
 	root.add_child(dust)
 	get_tree().create_timer(0.8).timeout.connect(func():
@@ -319,16 +285,7 @@ func _spawn_impact(pos: Vector3, normal: Vector3) -> void:
 
 	# --- След от пули (scorch) ---
 	var scorch := MeshInstance3D.new()
-	var quad := QuadMesh.new()
-	quad.size = Vector2(0.05, 0.05)
-	var scorch_mat := StandardMaterial3D.new()
-	scorch_mat.albedo_color = Color(0.55, 0.48, 0.38)
-	scorch_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	scorch_mat.albedo_color.a = 0.4
-	scorch_mat.roughness = 1.0
-	scorch_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	quad.material = scorch_mat
-	scorch.mesh = quad
+	scorch.mesh = assets.scorch_mesh
 	scorch.position = pos + normal * 0.003
 	root.add_child(scorch)
 	if normal.length_squared() > 0.01:
@@ -399,7 +356,7 @@ func _spawn_tracer(muzzle_pos: Vector3, hit_pos: Vector3) -> void:
 	)
 
 
-@rpc("call_local", "reliable")
+@rpc("call_local", "unreliable")
 func _spawn_blood(pos: Vector3, normal: Vector3) -> void:
 	var root := get_tree().current_scene
 	if not root:
@@ -421,6 +378,44 @@ func _spawn_blood(pos: Vector3, normal: Vector3) -> void:
 		if is_instance_valid(blood):
 			blood.queue_free()
 	)
+
+
+static func _get_impact_assets(is_ground: bool) -> Dictionary:
+	if _impact_assets.has(is_ground):
+		return _impact_assets[is_ground]
+
+	var spark_mat := StandardMaterial3D.new()
+	spark_mat.albedo_color = Color(1.0, 0.85, 0.3) if is_ground else Color(1.0, 0.9, 0.6)
+	spark_mat.emission_enabled = true
+	spark_mat.emission = Color(1.0, 0.8, 0.2) if is_ground else Color(1.0, 0.9, 0.5)
+	spark_mat.emission_energy_multiplier = 8.0 if is_ground else 12.0
+	var spark_mesh := BoxMesh.new()
+	spark_mesh.size = Vector3(0.025, 0.025, 0.025)
+	spark_mesh.material = spark_mat
+
+	var dust_mat := StandardMaterial3D.new()
+	dust_mat.albedo_color = Color(0.92, 0.87, 0.78, 0.5) if is_ground else Color(0.82, 0.80, 0.76, 0.5)
+	dust_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	dust_mat.roughness = 1.0
+	var dust_mesh := BoxMesh.new()
+	dust_mesh.size = Vector3(0.04, 0.04, 0.04)
+	dust_mesh.material = dust_mat
+
+	var scorch_mat := StandardMaterial3D.new()
+	scorch_mat.albedo_color = Color(0.55, 0.48, 0.38, 0.4)
+	scorch_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	scorch_mat.roughness = 1.0
+	scorch_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var scorch_mesh := QuadMesh.new()
+	scorch_mesh.size = Vector2(0.05, 0.05)
+	scorch_mesh.material = scorch_mat
+
+	_impact_assets[is_ground] = {
+		"spark_mesh": spark_mesh,
+		"dust_mesh": dust_mesh,
+		"scorch_mesh": scorch_mesh,
+	}
+	return _impact_assets[is_ground]
 
 
 func _get_player() -> Node:

@@ -1,19 +1,14 @@
-extends State
+extends PlayerState
 class_name IdleState
 
 ## Состояние покоя: игрок стоит на месте, ждёт ввода.
-
-const JUMP_VELOCITY := 4.5
-var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 
 
 func physics_update(delta: float) -> void:
 	if not player.is_multiplayer_authority():
 		return
 
-	# Гравитация
-	if not player.is_on_floor():
-		player.velocity.y -= gravity * delta
+	_apply_gravity(delta)
 
 	# Прыжок
 	if Input.is_action_just_pressed("ui_accept") and player.is_on_floor():
@@ -27,44 +22,10 @@ func physics_update(delta: float) -> void:
 		return
 
 	# Гасим горизонтальную скорость
-	player.velocity.x = move_toward(player.velocity.x, 0, 5.0)
-	player.velocity.z = move_toward(player.velocity.z, 0, 5.0)
+	player.velocity.x = move_toward(player.velocity.x, 0, SPEED)
+	player.velocity.z = move_toward(player.velocity.z, 0, SPEED)
 
 	player.move_and_slide()
 
 	# Стрельба/перезарядка
 	_handle_weapon_input()
-
-
-func handle_input(event: InputEvent) -> void:
-	if event.is_action_pressed("aim"):
-		player.set("is_aiming", true)
-	if event.is_action_released("aim"):
-		player.set("is_aiming", false)
-
-
-func _get_input_vector() -> Vector2:
-	if player.get("mobile_move_input") and player.mobile_move_input != Vector2.ZERO:
-		return player.mobile_move_input
-	return Input.get_vector("move_left", "move_right", "move_forward", "move_back")
-
-
-func _handle_weapon_input() -> void:
-	var weapon_mgr = player.get_node_or_null("WeaponManager")
-	if not weapon_mgr:
-		return
-
-	# Стрельба (зажатие)
-	var shoot_pressed := Input.is_action_pressed("shoot")
-	if player.get("mobile_shoot_pressed"):
-		shoot_pressed = true
-	if shoot_pressed and weapon_mgr.can_shoot():
-		weapon_mgr.shoot()
-
-	# Перезарядка
-	var reload_pressed := Input.is_action_just_pressed("reload")
-	if player.get("mobile_reload_triggered"):
-		reload_pressed = true
-		player.mobile_reload_triggered = false
-	if reload_pressed:
-		weapon_mgr.reload()

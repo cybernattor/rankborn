@@ -86,6 +86,9 @@ static func make_terrain(size: float, resolution: int, seed_val: int) -> ArrayMe
 			var avg_h2 := (v1.y + v2.y + v3.y) / 3.0
 			var c1 := _terrain_color(avg_h1, dirt, grass_dark, grass_mid, grass_light, rock)
 			var c2 := _terrain_color(avg_h2, dirt, grass_dark, grass_mid, grass_light, rock)
+			# Крутые склоны — голый камень, независимо от высоты.
+			c1 = _apply_slope(c1, (v1 - v0).cross(v2 - v0), rock)
+			c2 = _apply_slope(c2, (v3 - v1).cross(v2 - v1), rock)
 
 			st.set_color(c1)
 			st.add_vertex(v0)
@@ -116,6 +119,12 @@ static func _terrain_color(h: float, dirt: Color, g_dark: Color, g_mid: Color, g
 		return g_mid.lerp(g_light, (h - 3.0) / 3.0)
 	else:
 		return g_light.lerp(rock, clamp((h - 6.0) / 6.0, 0.0, 1.0))
+
+
+static func _apply_slope(color: Color, face_normal: Vector3, rock: Color) -> Color:
+	# 1.0 — горизонтальная грань, 0.0 — вертикальная.
+	var flatness := absf(face_normal.normalized().y)
+	return color.lerp(rock, 1.0 - smoothstep(0.7, 0.85, flatness))
 
 
 static func flat_material(color: Color, rough: float = 0.9) -> ShaderMaterial:

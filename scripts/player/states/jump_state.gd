@@ -1,11 +1,7 @@
-extends State
+extends PlayerState
 class_name JumpState
 
 ## Состояние прыжка/полёта: игрок в воздухе.
-
-const SPEED := 5.0
-const JUMP_VELOCITY := 4.5
-var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 
 
 func enter(_msg: Dictionary = {}) -> void:
@@ -18,9 +14,7 @@ func physics_update(delta: float) -> void:
 	if not player.is_multiplayer_authority():
 		return
 
-	# Гравитация
-	if not player.is_on_floor():
-		player.velocity.y -= gravity * delta
+	_apply_gravity(delta)
 
 	# Управление в воздухе (ограниченное)
 	var input_dir := _get_input_vector()
@@ -36,8 +30,7 @@ func physics_update(delta: float) -> void:
 
 	# Приземление
 	if player.is_on_floor():
-		var input_len := _get_input_vector().length()
-		if input_len > 0.1:
+		if input_dir.length() > 0.1:
 			transitioned.emit("WalkState")
 		else:
 			transitioned.emit("IdleState")
@@ -45,28 +38,3 @@ func physics_update(delta: float) -> void:
 
 	# Стрельба в воздухе
 	_handle_weapon_input()
-
-
-func handle_input(event: InputEvent) -> void:
-	if event.is_action_pressed("aim"):
-		player.set("is_aiming", true)
-	if event.is_action_released("aim"):
-		player.set("is_aiming", false)
-
-
-func _get_input_vector() -> Vector2:
-	if player.get("mobile_move_input") and player.mobile_move_input != Vector2.ZERO:
-		return player.mobile_move_input
-	return Input.get_vector("move_left", "move_right", "move_forward", "move_back")
-
-
-func _handle_weapon_input() -> void:
-	var weapon_mgr = player.get_node_or_null("WeaponManager")
-	if not weapon_mgr:
-		return
-
-	var shoot_pressed := Input.is_action_pressed("shoot")
-	if player.get("mobile_shoot_pressed"):
-		shoot_pressed = true
-	if shoot_pressed and weapon_mgr.can_shoot():
-		weapon_mgr.shoot()

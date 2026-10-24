@@ -16,12 +16,6 @@ var local_player_id: int = 1
 func _ready() -> void:
 	_build_lowpoly_terrain()
 
-	var sun := $DirectionalLight3D
-	sun.light_color = Color(1.0, 0.95, 0.85)
-	sun.light_energy = 1.5
-	sun.shadow_enabled = true
-	sun.rotation_degrees = Vector3(-50, 30, 0)
-
 	NetworkManager.player_connected.connect(_on_player_connected)
 	NetworkManager.player_disconnected.connect(_on_player_disconnected)
 
@@ -51,16 +45,8 @@ func _build_lowpoly_terrain() -> void:
 	terrain_instance.set_surface_override_material(0, MeshUtils.terrain_material())
 	add_child(terrain_instance)
 
-	var ground_body := get_node_or_null("GroundBody")
-	if not ground_body:
-		ground_body = StaticBody3D.new()
-		ground_body.name = "GroundBody"
-		add_child(ground_body)
-
-	for child in ground_body.get_children():
-		if child is CollisionShape3D:
-			child.queue_free()
-
+	# GroundBody лежит в сцене пустым: единственная коллизия земли — trimesh по мешу.
+	var ground_body: StaticBody3D = $GroundBody
 	var col := CollisionShape3D.new()
 	var terrain_collision := terrain_mesh.create_trimesh_shape()
 	terrain_collision.backface_collision = true

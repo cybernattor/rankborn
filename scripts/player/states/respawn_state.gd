@@ -20,18 +20,6 @@ func enter(_msg: Dictionary = {}) -> void:
 	player.velocity = Vector3.ZERO
 	player.visible = true
 
-	# Прячем меши для локального игрока (first-person)
-	if player.is_multiplayer_authority():
-		var body := player.get_node_or_null("BodyMesh")
-		if body:
-			body.visible = false
-		var camera := player.get_node_or_null("Head/Camera3D")
-		if camera:
-			var la := camera.get_node_or_null("LeftArm")
-			if la: la.visible = false
-			var ra := camera.get_node_or_null("RightArm")
-			if ra: ra.visible = false
-
 	# Сразу переходим в Idle
 	transitioned.emit("IdleState")
 
