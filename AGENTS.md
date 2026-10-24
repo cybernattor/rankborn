@@ -81,9 +81,10 @@ All input goes through Input actions (`move_*`, `shoot`, `aim`, `jump`, `crouch`
 
 ## Design reference
 
-The meta-game (front line, logistics, trenches, hierarchy) is based on **Foxhole**; Rankborn's difference is FPS combat, a modular weapon designer and PC + mobile crossplay. See `README.md`.
+The meta-game (front line, logistics, trenches, hierarchy) is based on **Foxhole**; Rankborn's difference is FPS combat, a modular weapon designer and PC + mobile crossplay. Rationale, open questions and the crossplay fairness rules (no aim assist for mouse; slowdown/friction only, never snap, for touch/gamepad; fairness via combat design first) are in `docs/design.md`.
 
 ## Reference
 
 - Architecture doc: `docs/architecture.md`
+- Design decisions (Foxhole, crossplay fairness): `docs/design.md`
 - Project description: `README.md` (Russian)
