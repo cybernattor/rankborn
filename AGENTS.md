@@ -86,5 +86,6 @@ The meta-game (front line, logistics, trenches, hierarchy) is based on **Foxhole
 ## Reference
 
 - Architecture doc: `docs/architecture.md`
-- Design decisions (Foxhole, crossplay fairness): `docs/design.md`
+- Design decisions (Foxhole, crossplay fairness, camera — undecided): `docs/design.md`
+- Fix plan by phase, with acceptance criteria: `docs/roadmap.md`
 - Project description: `README.md` (Russian)
