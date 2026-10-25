@@ -2,13 +2,13 @@
 
 ## What this is
 
-Godot 4.6+ multiplayer FPS/strategy game. GDScript only. No C#, no build system outside Godot.
+Godot 4.7 multiplayer shooter/strategy game (currently first-person; over-the-shoulder camera is the working decision). GDScript only. No C#, no build system outside Godot.
 
 ## Running the project
 
 - **Open and run**: Open `project.godot` in Godot Editor → F5
 - **No CLI build**: There is no `npm`, `cargo`, or equivalent. All compilation is Godot-side.
-- **Export**: Windows x86_64 via `export_presets.cfg` → `export/windows/Rankborn.exe`
+- **Export**: Windows x86_64 and Android presets in `export_presets.cfg`; output goes to `export/` (git-ignored)
 
 ## Network testing (critical)
 
@@ -26,17 +26,18 @@ LAN discovery is broadcast-based (port 7001). Instances on the same machine disc
 - `NetworkManager` → ENet P2P, player registry, host/client logic (`scripts/autoload/network_manager.gd`)
 - `LanDiscovery` → UDP broadcast lobby browser (`scripts/autoload/lan_discovery.gd`)
 - `SFXManager` → Audio (`scripts/audio/sfx_manager.gd`)
+- `GameSettings` → Controls settings and nickname, saved to `user://settings.cfg`; `is_touch_device()` (`scripts/autoload/game_settings.gd`)
 
 **Scene flow**: `main_menu.tscn` → (host or join) → `game_scene.tscn` (spawns players, builds terrain)
 
 **Key scenes**:
-- `scenes/shared/player.tscn` → CharacterBody3D with FPS controller
+- `scenes/shared/player.tscn` → CharacterBody3D player (camera, sync, state machine)
 - `scenes/game/game_scene.tscn` → World with terrain, spawn points, players node
 - `scenes/weapons/rifle.tscn` → First weapon
 
 **Key scripts**:
-- `scripts/player/player_controller.gd` → Movement, aiming, recoil, death/respawn, mobile input
-- `scripts/world/game_scene.gd` → Player spawning, terrain generation, mobile UI wiring
+- `scripts/player/player_controller.gd` → Look (mouse/gamepad/swipe), aiming, recoil, crouch, input blocking, death; movement lives in `scripts/player/states/` (`PlayerState` base)
+- `scripts/world/game_scene.gd` → Player spawning, terrain generation, swipe/pause wiring, host-left handling
 - `scripts/mesh_utils.gd` → Procedural mesh generation (humanoid, terrain, boxes)
 
 ## Networking conventions
@@ -53,7 +54,7 @@ LAN discovery is broadcast-based (port 7001). Instances on the same machine disc
 - Type hints on function signatures and `const`/`var` declarations (GDScript style)
 - Physics engine: **Jolt Physics** (not Godot's default)
 - Renderer: D3D12 on Windows (`rendering/rendering_device/driver.windows="d3d12"`)
-- Procedural low-poly terrain via `MeshUtils.make_terrain()` with `FastNoiseLite` (seed 42)
+- Procedural low-poly terrain via `MeshUtils.make_terrain()` with `FastNoiseLite` (seed 42): 60×60 grid, per-vertex colors, flat-shaded faces (`smooth` parameter exists but is off)
 
 ## Mobile support
 
@@ -67,7 +68,7 @@ All input goes through Input actions (`move_*`, `shoot`, `aim`, `jump`, `crouch`
 ## Gotchas
 
 - Player mesh is built procedurally in `_build_lowpoly_body()` — no external 3D models for players
-- Spawn positions are deterministic: `absi(peer_id) % spawn_count`
+- Spawn slots are assigned by the host (`players[id].spawn_index`, first free marker); players spawn and respawn facing the map centre
 - Local player body is rendered shadows-only (`cast_shadow = SHADOWS_ONLY`), fully visible for remote players
 - `data/` and `resources/` do not exist yet — SQLite persistence is not implemented
 - The `addons/godot_mcp` plugin is enabled (Godot MCP integration for AI tools)
@@ -84,11 +85,12 @@ All input goes through Input actions (`move_*`, `shoot`, `aim`, `jump`, `crouch`
 
 ## Design reference
 
-The meta-game (front line, logistics, trenches, player-driven leadership via ranks and regiments — no single commander) is based on **Foxhole**; Rankborn's difference is FPS combat, a modular weapon designer and PC + mobile crossplay. Rationale, open questions and the crossplay fairness rules (no aim assist for mouse; slowdown/friction only, never snap, for touch/gamepad; fairness via combat design first) are in `docs/design.md`.
+The meta-game (front line, logistics, trenches, player-driven leadership via ranks and regiments — no single commander) is based on **Foxhole**; Rankborn's difference is 3D shooter combat (not isometric), a modular weapon designer and PC + mobile crossplay. Rationale, open questions and the crossplay fairness rules (no aim assist for mouse; slowdown/friction only, never snap, for touch/gamepad; fairness via combat design first) are in `docs/design.md`.
 
 ## Reference
 
-- Architecture doc: `docs/architecture.md`
-- Design decisions (Foxhole, crossplay fairness, leadership, era/factions/logistics floor; camera — working decision TPS over the shoulder + first-person ADS + tactical map, to be confirmed by prototype at the start of roadmap phase 3; scale assumption up to 64 players per sector): `docs/design.md`
+- Architecture doc (actual code structure, network flow): `docs/architecture.md`
+- Shooting parameters and ideas: `docs/shooting.md`
+- Design decisions (Foxhole, crossplay fairness, leadership, era/factions/logistics floor; camera — working decision TPS over the shoulder + first-person ADS + tactical map, to be confirmed by prototype in roadmap phase 1.5; scale assumption up to 64 players per sector): `docs/design.md`
 - Fix plan by phase, with acceptance criteria: `docs/roadmap.md`
 - Project description: `README.md` (Russian)
