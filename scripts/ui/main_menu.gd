@@ -11,6 +11,8 @@ extends Control
 @onready var player_list: ItemList = %PlayerList
 @onready var found_games_list: ItemList = %FoundGamesList
 @onready var exit_button: Button = %ExitButton
+@onready var leave_button: Button = %LeaveButton
+@onready var name_input: LineEdit = %NameInput
 
 var _found_games: Array = []
 var _in_lobby: bool = false
@@ -43,6 +45,10 @@ func _ready() -> void:
 	join_selected_button.pressed.connect(_on_join_selected_pressed)
 	start_button.pressed.connect(_on_start_pressed)
 	exit_button.pressed.connect(_on_exit_pressed)
+	leave_button.pressed.connect(_on_leave_pressed)
+	name_input.max_length = NetworkManager.MAX_NAME_LENGTH
+	name_input.text = GameSettings.player_name
+	name_input.text_changed.connect(_on_name_changed)
 	found_games_list.item_selected.connect(_on_found_game_selected)
 	found_games_list.item_activated.connect(_on_found_game_activated)
 	NetworkManager.player_connected.connect(_on_player_connected)
@@ -51,6 +57,7 @@ func _ready() -> void:
 	NetworkManager.connection_succeeded.connect(_on_connection_succeeded)
 	NetworkManager.connection_failed.connect(_on_connection_failed)
 	NetworkManager.match_started.connect(_on_match_started)
+	NetworkManager.server_disconnected.connect(_on_server_disconnected)
 	LanDiscovery.games_updated.connect(_on_games_updated)
 	start_button.visible = false
 	start_button.disabled = true
@@ -69,10 +76,13 @@ func _ready() -> void:
 
 
 func _notification(what: int) -> void:
-	# Кнопка «Назад» на Android работает как кнопка «Выход»
+	# Кнопка «Назад» на Android: из лобби — выйти из лобби, иначе — как «Выход»
 	# (quit_on_go_back выключен ради меню паузы в матче).
 	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
-		_on_exit_pressed()
+		if _in_lobby:
+			_on_leave_pressed()
+		else:
+			_on_exit_pressed()
 
 
 func _exit_tree() -> void:
@@ -195,13 +205,31 @@ func _on_connection_succeeded() -> void:
 
 
 func _on_connection_failed() -> void:
+	_return_to_browsing("Ошибка подключения. Продолжаем поиск...")
+
+
+func _on_leave_pressed() -> void:
+	NetworkManager.disconnect_game()
+	_return_to_browsing("Вы покинули лобби. Поиск игр...")
+
+
+func _on_server_disconnected() -> void:
+	_return_to_browsing("Хост закрыл лобби. Поиск игр...")
+
+
+func _return_to_browsing(message: String) -> void:
 	_in_lobby = false
 	_set_connect_ui_enabled(true)
+	start_button.visible = false
+	ip_label.text = ""
+	player_list.clear()
 	var browse_err := LanDiscovery.start_browsing()
-	if browse_err != OK:
-		status_label.text = "Ошибка подключения и сетевого поиска"
-	else:
-		status_label.text = "Ошибка подключения. Продолжаем поиск..."
+	status_label.text = message if browse_err == OK else "Ошибка сетевого поиска (порт заблокирован?)"
+
+
+func _on_name_changed(new_name: String) -> void:
+	GameSettings.player_name = new_name
+	GameSettings.save_settings()
 
 
 func _on_player_connected(_id: int) -> void:
@@ -253,6 +281,9 @@ func _set_connect_ui_enabled(enabled: bool) -> void:
 	join_button.disabled = not enabled
 	join_selected_button.disabled = not enabled or found_games_list.get_selected_items().is_empty()
 	found_games_list.mouse_filter = Control.MOUSE_FILTER_STOP if enabled else Control.MOUSE_FILTER_IGNORE
+	# Ник меняется только вне лобби: в лобби он уже отправлен хосту.
+	name_input.editable = enabled
+	leave_button.visible = not enabled
 
 
 func _update_player_list() -> void:

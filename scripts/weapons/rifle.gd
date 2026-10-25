@@ -133,7 +133,7 @@ func shoot() -> void:
 				hit_confirmed.emit(is_headshot, false)
 				if not health.kill_confirmed.is_connected(_on_kill_confirmed):
 					health.kill_confirmed.connect(_on_kill_confirmed, CONNECT_ONE_SHOT)
-			_spawn_blood.rpc(hit_position, hit_normal)
+			_spawn_blood.rpc(hit_position, hit_normal, collider.get_multiplayer_authority())
 		else:
 			_spawn_impact.rpc(hit_position, hit_normal)
 
@@ -358,7 +358,11 @@ func _spawn_tracer(muzzle_pos: Vector3, hit_pos: Vector3) -> void:
 
 
 @rpc("call_local", "unreliable")
-func _spawn_blood(pos: Vector3, normal: Vector3) -> void:
+func _spawn_blood(pos: Vector3, normal: Vector3, victim_id: int = 0) -> void:
+	# У самой жертвы брызги появлялись в полуметре от камеры и закрывали
+	# экран огромными кубами — о попадании ей сообщает эффект урона на экране.
+	if victim_id == multiplayer.get_unique_id():
+		return
 	var root := get_tree().current_scene
 	if not root:
 		return

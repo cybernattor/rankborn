@@ -66,6 +66,22 @@ horizontal_alignment = 1
 theme_override_colors/font_color = Color(0.8, 0.85, 0.9, 1)
 theme_override_font_sizes/font_size = 46
 
+[node name="NameRow" type="HBoxContainer" parent="Background/Margin/MainVBox"]
+layout_mode = 2
+alignment = 1
+theme_override_constants/separation = 8
+
+[node name="NameLabel" type="Label" parent="Background/Margin/MainVBox/NameRow"]
+layout_mode = 2
+text = "Ник:"
+
+[node name="NameInput" type="LineEdit" parent="Background/Margin/MainVBox/NameRow"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(260, 0)
+placeholder_text = "Как тебя звать в бою"
+max_length = 16
+
 [node name="ColumnsHBox" type="HBoxContainer" parent="Background/Margin/MainVBox"]
 layout_mode = 2
 size_flags_vertical = 3
@@ -205,6 +221,13 @@ size_flags_horizontal = 3
 text = "Поиск игр в локалке..."
 autowrap_mode = 2
 theme_override_font_sizes/font_size = 14
+
+[node name="LeaveButton" type="Button" parent="Background/Margin/MainVBox/BottomBar"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+custom_minimum_size = Vector2(160, 0)
+text = "Покинуть лобби"
 
 [node name="ExitButton" type="Button" parent="Background/Margin/MainVBox/BottomBar"]
 unique_name_in_owner = true

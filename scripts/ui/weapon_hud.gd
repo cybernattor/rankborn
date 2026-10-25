@@ -16,6 +16,8 @@ extends CanvasLayer
 @onready var scope_dot: ColorRect = $UILayer/ScopeDot
 @onready var scope_cross_v: ColorRect = $UILayer/ScopeCrossV
 @onready var scope_cross_h: ColorRect = $UILayer/ScopeCrossH
+@onready var scope_cross_bottom: ColorRect = $UILayer/ScopeCrossBottom
+@onready var scope_cross_right: ColorRect = $UILayer/ScopeCrossRight
 @onready var hit_marker: Control = $UILayer/HitMarker
 
 var _weapon_manager: WeaponManager
@@ -104,7 +106,9 @@ func _update_crosshair_spread(delta: float) -> void:
 
 	_target_spread = _calculate_spread()
 
-	_current_spread = lerp(_current_spread, _target_spread, SPREAD_SPEED * delta)
+	# Экспоненциальное сглаживание: коэффициент всегда < 1, поэтому при просадке
+	# FPS (delta > 1/SPREAD_SPEED) прицел не раскачивается и не улетает за экран.
+	_current_spread = lerpf(_current_spread, _target_spread, 1.0 - exp(-SPREAD_SPEED * delta))
 	if abs(_current_spread - _target_spread) < 0.01:
 		_current_spread = _target_spread
 
@@ -152,6 +156,10 @@ func _set_scope_visible(show_scope: bool) -> void:
 		scope_cross_v.visible = show_scope
 	if scope_cross_h:
 		scope_cross_h.visible = show_scope
+	if scope_cross_bottom:
+		scope_cross_bottom.visible = show_scope
+	if scope_cross_right:
+		scope_cross_right.visible = show_scope
 
 
 func _update_ammo() -> void:

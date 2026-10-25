@@ -13,9 +13,8 @@ func enter(_msg: Dictionary = {}) -> void:
 		health.reset()
 
 	# Позиция спавна
-	var spawn_pos: Variant = player.get("spawn_position")
-	if spawn_pos != null:
-		player.global_position = spawn_pos
+	player.global_position = player.spawn_position
+	player.face_map_center()
 
 	player.velocity = Vector3.ZERO
 	player.visible = true

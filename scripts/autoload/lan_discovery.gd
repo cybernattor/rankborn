@@ -16,7 +16,10 @@ var _mode: String = "" # "", "host", "browse"
 var _game_port: int = NetworkManager.DEFAULT_PORT
 var _game_name: String = "Rankborn"
 var _query_timer: float = 0.0
-## key "ip:port" -> Dictionary
+## Случайный id сессии хостинга: одно лобби приходит и по LAN, и по loopback
+## с разных адресов — по id его можно схлопнуть в одну строку.
+var _host_id: String = ""
+## key "host_id:port" -> Dictionary
 var _found: Dictionary = {}
 
 
@@ -51,6 +54,7 @@ func start_hosting(game_port: int, game_name: String = "Rankborn") -> Error:
 	stop()
 	_game_port = game_port
 	_game_name = game_name
+	_host_id = "%08x%08x" % [randi(), randi()]
 	_udp = PacketPeerUDP.new()
 	var err := _udp.bind(DISCOVERY_PORT)
 	if err != OK:
@@ -62,10 +66,14 @@ func start_hosting(game_port: int, game_name: String = "Rankborn") -> Error:
 
 
 func stop() -> void:
+	var was_browsing := _mode == "browse"
 	_mode = ""
 	_found.clear()
 	if _udp.is_bound():
 		_udp.close()
+	# Иначе в меню остаётся замороженный список со старым числом игроков.
+	if was_browsing:
+		games_updated.emit([])
 
 
 func get_games() -> Array:
@@ -115,6 +123,7 @@ func _reply_announce(to_ip: String, to_port: int) -> void:
 	var payload := {
 		"protocol": PROTOCOL_ID,
 		"type": "announce",
+		"host_id": _host_id,
 		"name": _game_name,
 		"port": _game_port,
 		"players": NetworkManager.players.size(),
@@ -135,11 +144,16 @@ func _register_game(data: Dictionary, from_ip: String) -> void:
 		ip = str(data.get("ip", ""))
 	if ip.is_empty():
 		return
+	var host_id := str(data.get("host_id", ip))
 	# Ignore our own lobby announce if somehow received.
-	if NetworkManager.is_host and ip == NetworkManager.get_lan_ip() and port == _game_port:
+	if NetworkManager.is_host and host_id == _host_id:
 		return
 
-	var key := "%s:%d" % [ip, port]
+	var key := "%s:%d" % [host_id, port]
+	# Одно лобби отвечает и на broadcast, и на loopback-запрос. Предпочитаем
+	# адрес, по которому зайдёт и другая машина, а не 127.0.0.1.
+	if _found.has(key) and ip.begins_with("127.") and not str(_found[key].ip).begins_with("127."):
+		ip = _found[key].ip
 	var entry := {
 		"key": key,
 		"ip": ip,
@@ -155,6 +169,7 @@ func _register_game(data: Dictionary, from_ip: String) -> void:
 		changed = (
 			prev.get("players") != entry.players
 			or prev.get("name") != entry.name
+			or prev.get("ip") != entry.ip
 		)
 	_found[key] = entry
 	if changed:

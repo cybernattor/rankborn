@@ -18,6 +18,7 @@ func _ready() -> void:
 
 	NetworkManager.player_connected.connect(_on_player_connected)
 	NetworkManager.player_disconnected.connect(_on_player_disconnected)
+	NetworkManager.server_disconnected.connect(_on_server_disconnected)
 
 	var my_id := multiplayer.get_unique_id()
 	local_player_id = my_id
@@ -55,6 +56,12 @@ func _build_lowpoly_terrain() -> void:
 
 func _on_player_connected(id: int) -> void:
 	_spawn_player(id)
+
+
+# Хост вышел — матча больше нет, возвращаемся в меню (там снова поиск игр).
+func _on_server_disconnected() -> void:
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	get_tree().change_scene_to_file("res://scenes/main/main_menu.tscn")
 
 
 func _on_player_disconnected(id: int) -> void:

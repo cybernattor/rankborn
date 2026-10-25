@@ -17,6 +17,8 @@ var invert_y: bool = false
 var aim_toggle: bool = false
 ## true — присед переключается нажатием, false — пока кнопка зажата.
 var crouch_toggle: bool = false
+## Ник в лобби и в игре (пустой — «Игрок_NNNN»).
+var player_name: String = ""
 
 
 func _ready() -> void:
@@ -33,6 +35,7 @@ func load_settings() -> void:
 	invert_y = cfg.get_value("controls", "invert_y", invert_y)
 	aim_toggle = cfg.get_value("controls", "aim_toggle", aim_toggle)
 	crouch_toggle = cfg.get_value("controls", "crouch_toggle", crouch_toggle)
+	player_name = cfg.get_value("profile", "player_name", player_name)
 	changed.emit()
 
 
@@ -44,6 +47,7 @@ func save_settings() -> void:
 	cfg.set_value("controls", "invert_y", invert_y)
 	cfg.set_value("controls", "aim_toggle", aim_toggle)
 	cfg.set_value("controls", "crouch_toggle", crouch_toggle)
+	cfg.set_value("profile", "player_name", player_name)
 	cfg.save(SETTINGS_PATH)
 	changed.emit()
 

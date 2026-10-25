@@ -17,6 +17,8 @@ extends CharacterBody3D
 var body_mesh: MeshInstance3D
 
 var spawn_position: Vector3 = Vector3.ZERO
+## Куда смотрит игрок после спавна (центр игровой зоны).
+const MAP_CENTER := Vector3.ZERO
 
 ## Ввод заблокирован меню (пауза не останавливает сетевую игру).
 var input_blocked: bool = false
@@ -95,6 +97,18 @@ func _setup_weapon_hud() -> void:
 func setup_spawn(pos: Vector3) -> void:
 	spawn_position = pos
 	global_position = pos
+	face_map_center()
+
+
+## После (ре)спавна смотрим к центру карты, а не туда, куда смотрел перед смертью:
+## спавны стоят у края, и старый взгляд часто упирался в обрыв за границей карты.
+func face_map_center() -> void:
+	var to_center := MAP_CENTER - global_position
+	to_center.y = 0.0
+	if to_center.length_squared() > 0.01:
+		rotation.y = atan2(-to_center.x, -to_center.z)
+	head.rotation.x = 0.0
+	_recoil_x = 0.0
 
 
 ## Можно ли сейчас управлять персонажем (жив и не открыто меню).

@@ -74,7 +74,10 @@ All input goes through Input actions (`move_*`, `shoot`, `aim`, `jump`, `crouch`
 - There is no CI, linting, or typecheck pipeline. Headless check: `godot --headless --path . --script tests/spatial_check.gd` (network: run two processes with `-- host` and `-- client`)
 - Input check needs a real display (GUI gets no events in `--headless`): `xvfb-run -a godot --path . --rendering-driver opengl3 --script tests/input_check.gd`
 - Mouse look lives in `_input`, not `_unhandled_input`: with a captured cursor it sits at screen centre, and any HUD control there would swallow motion. HUD controls must stay `mouse_filter = IGNORE`
-- Pause never sets `get_tree().paused` (network game keeps running); the menu sets `player.input_blocked`
+- `NetworkManager.server_disconnected` fires on the client when the host leaves: the menu goes back to browsing, a running match returns to the main menu
+- Nicknames: `GameSettings.player_name` (saved), host stores it in `players[id].name`; clients send theirs via `_register_name` RPC right after connecting. Always pass names through `NetworkManager.sanitize_name`
+- LAN announces carry a per-session `host_id`; the browser keys lobbies by it so one host reachable via LAN and loopback shows once
+- - Pause never sets `get_tree().paused` (network game keeps running); the menu sets `player.input_blocked`
 - Player collision shape is duplicated per instance in `_ready` — crouch changes its height
 - Movement states (Idle/Walk/Jump) extend `PlayerState`; shooting/reload input is polled only there via `WeaponManager`, not in the weapon
 - Lighting, fog and sun live in `game_scene.tscn`, not in code; `GroundBody` has no shape in the scene — its only collision is the terrain trimesh built at runtime

@@ -77,7 +77,7 @@ func _check_mouse_look(settings: Node) -> void:
 	var yaw := player.rotation.y
 	var pitch: float = player.head.rotation.x
 	await _mouse(Vector2(100, 50))
-	_check(is_equal_approx(yaw - player.rotation.y, 0.2), "Мышь в центре экрана не поворачивает камеру (HUD съедает движение?)")
+	_check(is_equal_approx(_turned_right(yaw), 0.2), "Мышь в центре экрана не поворачивает камеру (HUD съедает движение?)")
 	_check(is_equal_approx(pitch - player.head.rotation.x, 0.1), "Мышь не наклоняет голову")
 	# В прицеле поворот медленнее пропорционально tan(fov/2).
 	player.camera.fov = player.AIM_FOV
@@ -85,7 +85,7 @@ func _check_mouse_look(settings: Node) -> void:
 	yaw = player.rotation.y
 	await _mouse(Vector2(100, 0))
 	var expected := 0.2 * tan(deg_to_rad(player.AIM_FOV) * 0.5) / tan(deg_to_rad(player.DEFAULT_FOV) * 0.5)
-	_check(is_equal_approx(yaw - player.rotation.y, expected), "Чувствительность в прицеле не масштабируется по FOV")
+	_check(is_equal_approx(_turned_right(yaw), expected), "Чувствительность в прицеле не масштабируется по FOV")
 	player.camera.fov = player.DEFAULT_FOV
 	player.set_process(true)
 	settings.invert_y = true
@@ -102,7 +102,7 @@ func _check_mouse_look(settings: Node) -> void:
 	Input.flush_buffered_events()
 	yaw = player.rotation.y
 	await create_timer(0.3).timeout
-	_check(yaw - player.rotation.y > 0.5, "Правый стик геймпада не поворачивает камеру")
+	_check(_turned_right(yaw) > 0.5, "Правый стик геймпада не поворачивает камеру")
 	stick.axis_value = 0.0
 	Input.parse_input_event(stick)
 	Input.flush_buffered_events()
@@ -241,7 +241,7 @@ func _check_touch() -> void:
 	_check(Input.is_action_pressed("shoot"), "FIRE вторым пальцем не стреляет")
 	var yaw := player.rotation.y
 	await _drag(1, fire + Vector2(40, 0), Vector2(40, 0))
-	_check(player.rotation.y < yaw, "Перетаскивание по FIRE не крутит камеру")
+	_check(_turned_right(yaw) > 0.0, "Перетаскивание по FIRE не крутит камеру")
 	await _touch(1, fire, false)
 	_check(not Input.is_action_pressed("shoot"))
 	await _touch(0, start, false)
@@ -252,7 +252,7 @@ func _check_touch() -> void:
 	var free_spot := Vector2(size.x * 0.6, size.y * 0.3)
 	await _touch(2, free_spot, true)
 	await _drag(2, free_spot + Vector2(50, 25), Vector2(50, 25))
-	_check(is_equal_approx(yaw - player.rotation.y, 0.2) and player.head.rotation.x < pitch, "Свайп не поворачивает камеру")
+	_check(is_equal_approx(_turned_right(yaw), 0.2) and player.head.rotation.x < pitch, "Свайп не поворачивает камеру")
 	await _touch(2, free_spot, false)
 	# AIM на тач-экране — переключатель.
 	var aim: Vector2 = ui._buttons.aim.center
@@ -283,6 +283,11 @@ func _check_touch() -> void:
 	await _touch(7, center, true)
 	await _touch(7, center, false)
 	_check(not pause_menu.visible and ui.visible, "Кнопки меню не нажимаются касанием")
+
+
+## Поворот вправо с момента yaw_before, с учётом перехода угла через ±PI.
+func _turned_right(yaw_before: float) -> float:
+	return angle_difference(player.rotation.y, yaw_before)
 
 
 func _check(condition: bool, message: String = "Нарушено условие управления") -> void:

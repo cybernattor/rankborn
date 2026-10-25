@@ -6,9 +6,12 @@ signal server_created()
 signal connection_failed()
 signal connection_succeeded()
 signal match_started()
+## Хост закрыл игру или связь с ним потеряна (только у клиента).
+signal server_disconnected()
 
 const DEFAULT_PORT := 7000
 const MAX_CLIENTS := 6
+const MAX_NAME_LENGTH := 16
 
 var peer: ENetMultiplayerPeer
 var is_host := false
@@ -21,6 +24,7 @@ func _ready() -> void:
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
 	multiplayer.connected_to_server.connect(_on_connected_to_server)
 	multiplayer.connection_failed.connect(_on_connection_failed)
+	multiplayer.server_disconnected.connect(_on_server_disconnected)
 
 
 func host_game(port: int = DEFAULT_PORT) -> void:
@@ -33,7 +37,7 @@ func host_game(port: int = DEFAULT_PORT) -> void:
 	multiplayer.multiplayer_peer = peer
 	is_host = true
 	players.clear()
-	players[1] = {"name": "Host", "spawn_index": 0}
+	players[1] = {"name": sanitize_name(GameSettings.player_name, 1), "spawn_index": 0}
 	var discovery_err := LanDiscovery.start_hosting(port, "Rankborn Lobby")
 	if discovery_err != OK:
 		push_warning("LAN discovery unavailable — lobby won't be visible in browser")
@@ -69,20 +73,31 @@ func get_player_id() -> int:
 	return multiplayer.get_unique_id()
 
 
-func get_player_name() -> String:
-	return "Player_%d" % multiplayer.get_unique_id()
+## Ник для показа: обрезанный, без пустых строк; запасной — «Игрок_NNNN».
+static func sanitize_name(raw: String, peer_id: int) -> String:
+	var clean := raw.strip_edges().left(MAX_NAME_LENGTH)
+	if clean.is_empty():
+		clean = "Игрок_%d" % (absi(peer_id) % 10000)
+	return clean
 
 
+## Адрес, который хост показывает друзьям. Сначала частные LAN-диапазоны,
+## затем любой другой IPv4 (VPN, CGNAT, нестандартная сеть) — loopback только
+## если других нет: 127.0.0.1 с другой машины бесполезен.
 func get_lan_ip() -> String:
+	var fallback := ""
 	for addr in IP.get_local_addresses():
+		var parts := addr.split(".")
+		if parts.size() != 4:
+			continue  # IPv6
 		if addr.begins_with("192.168.") or addr.begins_with("10."):
 			return addr
-		var parts := addr.split(".")
-		if parts.size() == 4 and parts[0] == "172":
-			var second := int(parts[1])
-			if second >= 16 and second <= 31:
-				return addr
-	return "127.0.0.1"
+		if parts[0] == "172" and int(parts[1]) >= 16 and int(parts[1]) <= 31:
+			return addr
+		if fallback.is_empty() and not addr.begins_with("127.") \
+				and not addr.begins_with("169.254.") and addr != "0.0.0.0":
+			fallback = addr
+	return fallback if not fallback.is_empty() else "127.0.0.1"
 
 
 func start_match() -> void:
@@ -115,7 +130,8 @@ func _on_peer_connected(id: int) -> void:
 	var spawn_index: int = 0
 	while spawn_index in used_slots:
 		spawn_index += 1
-	players[id] = {"name": "Player_%d" % id, "spawn_index": spawn_index}
+	# Настоящий ник клиент пришлёт сам (_register_name) сразу после подключения.
+	players[id] = {"name": sanitize_name("", id), "spawn_index": spawn_index}
 	player_connected.emit(id)
 	print("Player connected: %d" % id)
 
@@ -133,8 +149,28 @@ func _on_peer_disconnected(id: int) -> void:
 
 func _on_connected_to_server() -> void:
 	var my_id := multiplayer.get_unique_id()
+	_register_name.rpc_id(1, GameSettings.player_name)
 	connection_succeeded.emit()
 	print("Connected to server as %d" % my_id)
+
+
+## Клиент сообщает хосту свой ник; хост проверяет и рассылает список всем.
+@rpc("any_peer", "reliable")
+func _register_name(raw_name: String) -> void:
+	if not is_host:
+		return
+	var id := multiplayer.get_remote_sender_id()
+	if not players.has(id):
+		return
+	players[id].name = sanitize_name(raw_name, id)
+	_sync_player_list.rpc(players)
+	player_connected.emit(id)
+
+
+func _on_server_disconnected() -> void:
+	print("Server disconnected")
+	disconnect_game()
+	server_disconnected.emit()
 
 
 func _on_connection_failed() -> void:
