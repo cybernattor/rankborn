@@ -86,6 +86,6 @@ The meta-game (front line, logistics, trenches, player-driven leadership via ran
 ## Reference
 
 - Architecture doc: `docs/architecture.md`
-- Design decisions (Foxhole, crossplay fairness, camera — undecided): `docs/design.md`
+- Design decisions (Foxhole, crossplay fairness, leadership, era/factions/logistics floor; camera — recommended TPS + tactical map, to be confirmed by prototype): `docs/design.md`
 - Fix plan by phase, with acceptance criteria: `docs/roadmap.md`
 - Project description: `README.md` (Russian)
