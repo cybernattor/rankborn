@@ -9,7 +9,11 @@ extends Node3D
 @onready var pause_menu: Control = $PauseMenu
 @onready var game_mode: GameMode = $GameMode
 
+const TERRAIN_SIZE := 100.0
 const TERRAIN_RESOLUTION := 60
+const TERRAIN_SEED := 42
+## Зазор между ногами и землёй при спавне: капсула не должна начинать внутри склона.
+const SPAWN_CLEARANCE := 0.1
 
 var player_scene := preload("res://scenes/shared/player.tscn")
 var local_player_id: int = 1
@@ -42,7 +46,7 @@ func _ready() -> void:
 
 func _build_lowpoly_terrain() -> void:
 	# 60×60 ячеек по ~1.7 м: грани ещё видны (low-poly), но рельеф не «треугольный».
-	var terrain_mesh := MeshUtils.make_terrain(100.0, TERRAIN_RESOLUTION, 42)
+	var terrain_mesh := MeshUtils.make_terrain(TERRAIN_SIZE, TERRAIN_RESOLUTION, TERRAIN_SEED)
 	var terrain_instance := MeshInstance3D.new()
 	terrain_instance.mesh = terrain_mesh
 	terrain_instance.set_surface_override_material(0, MeshUtils.terrain_material())
@@ -95,10 +99,14 @@ func _spawn_player(id: int) -> void:
 
 
 func _get_spawn_position(id: int) -> Vector3:
-	# Хост назначает свободный маркер; координаты задаются в сцене.
+	# Хост назначает свободный маркер; маркер задаёт только место на карте (x, z),
+	# высоту берём с поверхности земли — иначе игроки появлялись в 4–13 м
+	# над склонами и падали с неба.
 	var slot_index: int = NetworkManager.players.get(id, {}).get("spawn_index", 0)
 	assert(slot_index >= 0 and slot_index < spawn_points.get_child_count())
-	return (spawn_points.get_child(slot_index) as Node3D).global_position
+	var marker := (spawn_points.get_child(slot_index) as Node3D).global_position
+	var ground := MeshUtils.terrain_height_at(TERRAIN_SIZE, TERRAIN_RESOLUTION, TERRAIN_SEED, marker.x, marker.z)
+	return Vector3(marker.x, ground + SPAWN_CLEARANCE, marker.z)
 
 
 # --- Ввод и меню ---

@@ -57,11 +57,7 @@ static func make_rifle() -> ArrayMesh:
 ## Цвет задаётся в вершинах (высота + наклон + лёгкий шум яркости) и плавно
 ## перетекает между треугольниками: соседние грани больше не «шахматка».
 static func make_terrain(size: float, resolution: int, seed_val: int, smooth: bool = false) -> ArrayMesh:
-	var noise := FastNoiseLite.new()
-	noise.seed = seed_val
-	noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
-	noise.frequency = 0.008
-	noise.fractal_octaves = 4
+	var noise := _terrain_noise(seed_val)
 
 	# Мелкие пятна оттенка, чтобы большие поля травы не были однотонными.
 	var tint := FastNoiseLite.new()
@@ -105,6 +101,39 @@ static func make_terrain(size: float, resolution: int, seed_val: int, smooth: bo
 				st.add_vertex(verts[k])
 	st.generate_normals()
 	return st.commit()
+
+
+## Высота поверхности земли в точке (x, z) — ровно та, что у меша make_terrain
+## с теми же параметрами (та же сетка и та же разбивка на треугольники).
+## Не зависит от физики, поэтому годится сразу после построения мира и
+## даёт одинаковый результат у всех пиров.
+static func terrain_height_at(size: float, resolution: int, seed_val: int, x: float, z: float) -> float:
+	var noise := _terrain_noise(seed_val)
+	var half := size / 2.0
+	var step := size / resolution
+	var fx := clampf((x + half) / step, 0.0, resolution - 0.0001)
+	var fz := clampf((z + half) / step, 0.0, resolution - 0.0001)
+	var gx := int(fx)
+	var gz := int(fz)
+	var u := fx - gx
+	var v := fz - gz
+	var h00 := noise.get_noise_2d(-half + gx * step, -half + gz * step) * TERRAIN_HEIGHT
+	var h10 := noise.get_noise_2d(-half + (gx + 1) * step, -half + gz * step) * TERRAIN_HEIGHT
+	var h01 := noise.get_noise_2d(-half + gx * step, -half + (gz + 1) * step) * TERRAIN_HEIGHT
+	var h11 := noise.get_noise_2d(-half + (gx + 1) * step, -half + (gz + 1) * step) * TERRAIN_HEIGHT
+	# Ячейка делится диагональю (1,0)–(0,1), как в make_terrain.
+	if u + v <= 1.0:
+		return h00 + (h10 - h00) * u + (h01 - h00) * v
+	return h11 + (h01 - h11) * (1.0 - u) + (h10 - h11) * (1.0 - v)
+
+
+static func _terrain_noise(seed_val: int) -> FastNoiseLite:
+	var noise := FastNoiseLite.new()
+	noise.seed = seed_val
+	noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+	noise.frequency = 0.008
+	noise.fractal_octaves = 4
+	return noise
 
 
 static func _terrain_color(h: float) -> Color:

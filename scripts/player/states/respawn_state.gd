@@ -7,14 +7,13 @@ func enter(_msg: Dictionary = {}) -> void:
 	if not player.is_multiplayer_authority():
 		return
 
-	# Восстанавливаем здоровье
+	# Сначала переносим на точку спавна, потом «оживляем»: иначе другие игроки
+	# могли увидеть ожившее тело на месте смерти (после зоны смерти — под картой).
+	player.global_position = player.spawn_position
+	player.face_map_center()
 	var health: HealthComponent = player.get_node_or_null("HealthComponent")
 	if health:
 		health.reset()
-
-	# Позиция спавна
-	player.global_position = player.spawn_position
-	player.face_map_center()
 
 	player.velocity = Vector3.ZERO
 	player.visible = true

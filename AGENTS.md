@@ -68,7 +68,7 @@ All input goes through Input actions (`move_*`, `shoot`, `aim`, `jump`, `crouch`
 ## Gotchas
 
 - Player mesh is built procedurally in `_build_lowpoly_body()` — no external 3D models for players
-- Spawn slots are assigned by the host (`players[id].spawn_index`, first free marker); players spawn and respawn facing the map centre
+- Spawn slots are assigned by the host (`players[id].spawn_index`, first free marker). Markers give only x/z: spawn height comes from `MeshUtils.terrain_height_at()` (same formula as the terrain mesh, no physics query — new collision is not queryable until the next physics step). Players spawn and respawn on the ground, facing the map centre
 - Local player body is rendered shadows-only (`cast_shadow = SHADOWS_ONLY`), fully visible for remote players
 - `data/` and `resources/` do not exist yet — SQLite persistence is not implemented
 - The `addons/godot_mcp` plugin is enabled (Godot MCP integration for AI tools)

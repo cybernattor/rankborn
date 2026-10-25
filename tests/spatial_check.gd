@@ -40,13 +40,15 @@ func _run() -> void:
 		var query := PhysicsRayQueryParameters3D.create(spawn.global_position, spawn.global_position - Vector3.UP * 40.0, 1)
 		var ground: Dictionary = world.get_world_3d().direct_space_state.intersect_ray(query)
 		_check(not ground.is_empty() and ground.collider == world.get_node("GroundBody"), "Маркер спавна находится под землёй")
+	_check_spawn_on_ground(world, player)
 	_check(player.get_node("WeaponHUD") != null and not remote.has_node("WeaponHUD"))
 	_check(player.get_node("Head/Camera3D/WeaponPivot/Rifle").get_multiplayer_authority() == 1)
 	_check(remote.get_node("Head/Camera3D/WeaponPivot/Rifle").get_multiplayer_authority() == 7)
 	_check(player.spawn_position.distance_to(remote.spawn_position) > 1.0)
 	var marker: Marker3D = world.get_node("SpawnPoints/Spawn2")
 	marker.position.x += 1.0
-	_check(world._get_spawn_position(7).is_equal_approx(marker.global_position))
+	var moved: Vector3 = world._get_spawn_position(7)
+	_check(is_equal_approx(moved.x, marker.global_position.x) and is_equal_approx(moved.z, marker.global_position.z), "Точка спавна не следует за маркером")
 	_check(world.get_node("SpawnPoints").get_child_count() >= network.MAX_CLIENTS + 1)
 	_check(not world.has_node("TerrainSafetyFloor"))
 	for wall: StaticBody3D in world.get_node("Boundaries").get_children():
@@ -193,6 +195,27 @@ func _check_shots(world: Node3D, player: CharacterBody3D, rifle: Node3D) -> void
 	_check(world.get_child_count() == children_before, "У жертвы брызги крови появляются перед камерой")
 	_check_hud(player)
 	target.queue_free()
+
+
+## Игроки появляются на земле, а не в воздухе: формула высоты совпадает с
+## настоящей коллизией земли, и точка спавна стоит прямо на поверхности.
+func _check_spawn_on_ground(world: Node3D, player: CharacterBody3D) -> void:
+	var space := world.get_world_3d().direct_space_state
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	var points: Array[Vector2] = []
+	for m: Marker3D in world.get_node("SpawnPoints").get_children():
+		points.append(Vector2(m.global_position.x, m.global_position.z))
+	for i in 100:
+		points.append(Vector2(rng.randf_range(-49.0, 49.0), rng.randf_range(-49.0, 49.0)))
+	for p in points:
+		var query := PhysicsRayQueryParameters3D.create(Vector3(p.x, 40, p.y), Vector3(p.x, -40, p.y), 1)
+		var hit: Dictionary = space.intersect_ray(query)
+		var formula := MeshUtils.terrain_height_at(world.TERRAIN_SIZE, world.TERRAIN_RESOLUTION, world.TERRAIN_SEED, p.x, p.y)
+		_check(not hit.is_empty() and absf(hit.position.y - formula) < 0.01, "Высота земли по формуле не совпадает с коллизией")
+	var below := PhysicsRayQueryParameters3D.create(player.spawn_position + Vector3.UP, player.spawn_position - Vector3.UP * 5, 1)
+	var ground: Dictionary = space.intersect_ray(below)
+	_check(not ground.is_empty() and player.spawn_position.y - ground.position.y < 0.2, "Игрок появляется в воздухе")
 
 
 func _check_hud(player: CharacterBody3D) -> void:
