@@ -77,7 +77,7 @@ All input goes through Input actions (`move_*`, `shoot`, `aim`, `jump`, `crouch`
 - `NetworkManager.server_disconnected` fires on the client when the host leaves: the menu goes back to browsing, a running match returns to the main menu
 - Nicknames: `GameSettings.player_name` (saved), host stores it in `players[id].name`; clients send theirs via `_register_name` RPC right after connecting. Always pass names through `NetworkManager.sanitize_name`
 - LAN announces carry a per-session `host_id`; the browser keys lobbies by it so one host reachable via LAN and loopback shows once
-- - Pause never sets `get_tree().paused` (network game keeps running); the menu sets `player.input_blocked`
+- Pause never sets `get_tree().paused` (network game keeps running); the menu sets `player.input_blocked`
 - Player collision shape is duplicated per instance in `_ready` — crouch changes its height
 - Movement states (Idle/Walk/Jump) extend `PlayerState`; shooting/reload input is polled only there via `WeaponManager`, not in the weapon
 - Lighting, fog and sun live in `game_scene.tscn`, not in code; `GroundBody` has no shape in the scene — its only collision is the terrain trimesh built at runtime
