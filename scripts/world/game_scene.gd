@@ -9,6 +9,8 @@ extends Node3D
 @onready var pause_menu: Control = $PauseMenu
 @onready var game_mode: GameMode = $GameMode
 
+const TERRAIN_RESOLUTION := 60
+
 var player_scene := preload("res://scenes/shared/player.tscn")
 var local_player_id: int = 1
 
@@ -39,7 +41,8 @@ func _ready() -> void:
 
 
 func _build_lowpoly_terrain() -> void:
-	var terrain_mesh := MeshUtils.make_terrain(100.0, 30, 42)
+	# 60×60 ячеек по ~1.7 м: грани ещё видны (low-poly), но рельеф не «треугольный».
+	var terrain_mesh := MeshUtils.make_terrain(100.0, TERRAIN_RESOLUTION, 42)
 	var terrain_instance := MeshInstance3D.new()
 	terrain_instance.mesh = terrain_mesh
 	terrain_instance.set_surface_override_material(0, MeshUtils.terrain_material())

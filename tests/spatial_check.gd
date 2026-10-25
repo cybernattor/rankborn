@@ -122,7 +122,7 @@ func _check_meshes() -> void:
 			if j not in connected and parts[i].intersects(parts[j]):
 				connected.append(j)
 	_check(connected.size() == parts.size(), "Части персонажа висят отдельно")
-	var terrain := MeshUtils.make_terrain(100.0, 30, 42)
+	var terrain := MeshUtils.make_terrain(100.0, 60, 42)
 	var terrain_vertices: PackedVector3Array = terrain.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
 	var faces := terrain.create_trimesh_shape().get_faces()
 	_check(faces.size() == terrain_vertices.size())

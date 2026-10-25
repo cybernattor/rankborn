@@ -1,5 +1,12 @@
 class_name MeshUtils
 
+const TERRAIN_HEIGHT := 12.0
+const TERRAIN_DIRT := Color(0.55, 0.38, 0.22)
+const TERRAIN_GRASS_DARK := Color(0.25, 0.50, 0.18)
+const TERRAIN_GRASS_MID := Color(0.35, 0.62, 0.22)
+const TERRAIN_GRASS_LIGHT := Color(0.48, 0.72, 0.30)
+const TERRAIN_ROCK := Color(0.55, 0.52, 0.48)
+
 
 static func make_box(size: Vector3, color: Color) -> ArrayMesh:
 	var st := SurfaceTool.new()
@@ -46,85 +53,77 @@ static func make_rifle() -> ArrayMesh:
 	return st.commit()
 
 
-static func make_terrain(size: float, resolution: int, seed_val: int) -> ArrayMesh:
+## Процедурная земля. smooth = false — плоские грани (low-poly), true — сглаженное освещение.
+## Цвет задаётся в вершинах (высота + наклон + лёгкий шум яркости) и плавно
+## перетекает между треугольниками: соседние грани больше не «шахматка».
+static func make_terrain(size: float, resolution: int, seed_val: int, smooth: bool = false) -> ArrayMesh:
 	var noise := FastNoiseLite.new()
 	noise.seed = seed_val
 	noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
 	noise.frequency = 0.008
 	noise.fractal_octaves = 4
 
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	st.set_smooth_group(-1)
+	# Мелкие пятна оттенка, чтобы большие поля травы не были однотонными.
+	var tint := FastNoiseLite.new()
+	tint.seed = seed_val + 1
+	tint.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+	tint.frequency = 0.06
 
 	var half := size / 2.0
 	var step := size / resolution
+	var row := resolution + 1
 
 	var verts: Array[Vector3] = []
-	for z in range(resolution + 1):
-		for x in range(resolution + 1):
+	for z in range(row):
+		for x in range(row):
 			var px := -half + x * step
 			var pz := -half + z * step
-			var py := noise.get_noise_2d(px, pz) * 12.0
-			verts.append(Vector3(px, py, pz))
+			verts.append(Vector3(px, noise.get_noise_2d(px, pz) * TERRAIN_HEIGHT, pz))
 
-	var dirt := Color(0.55, 0.38, 0.22)
-	var grass_dark := Color(0.25, 0.50, 0.18)
-	var grass_mid := Color(0.35, 0.62, 0.22)
-	var grass_light := Color(0.48, 0.72, 0.30)
-	var rock := Color(0.55, 0.52, 0.48)
+	var colors: Array[Color] = []
+	for z in range(row):
+		for x in range(row):
+			var v := verts[z * row + x]
+			# Нормаль вершины по соседям сетки — для цвета склона.
+			var hl := verts[z * row + maxi(x - 1, 0)].y
+			var hr := verts[z * row + mini(x + 1, resolution)].y
+			var hd := verts[maxi(z - 1, 0) * row + x].y
+			var hu := verts[mini(z + 1, resolution) * row + x].y
+			var normal := Vector3(hl - hr, 2.0 * step, hd - hu).normalized()
+			var color := _apply_slope(_terrain_color(v.y), normal)
+			var shade := 1.0 + tint.get_noise_2d(v.x, v.z) * 0.06
+			colors.append(Color(color.r * shade, color.g * shade, color.b * shade))
 
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.set_smooth_group(0 if smooth else -1)
 	for z in range(resolution):
 		for x in range(resolution):
-			var i := z * (resolution + 1) + x
-			var v0 := verts[i]
-			var v1 := verts[i + 1]
-			var v2 := verts[i + resolution + 1]
-			var v3 := verts[i + resolution + 2]
-
-			var avg_h1 := (v0.y + v1.y + v2.y) / 3.0
-			var avg_h2 := (v1.y + v2.y + v3.y) / 3.0
-			var c1 := _terrain_color(avg_h1, dirt, grass_dark, grass_mid, grass_light, rock)
-			var c2 := _terrain_color(avg_h2, dirt, grass_dark, grass_mid, grass_light, rock)
-			# Крутые склоны — голый камень, независимо от высоты.
-			c1 = _apply_slope(c1, (v1 - v0).cross(v2 - v0), rock)
-			c2 = _apply_slope(c2, (v3 - v1).cross(v2 - v1), rock)
-
-			st.set_color(c1)
-			st.add_vertex(v0)
-			st.set_color(c1)
-			st.add_vertex(v1)
-			st.set_color(c1)
-			st.add_vertex(v2)
-
-			st.set_color(c2)
-			st.add_vertex(v1)
-			st.set_color(c2)
-			st.add_vertex(v3)
-			st.set_color(c2)
-			st.add_vertex(v2)
-
+			var i := z * row + x
+			for k in [i, i + 1, i + row, i + 1, i + row + 1, i + row]:
+				st.set_color(colors[k])
+				st.add_vertex(verts[k])
 	st.generate_normals()
 	return st.commit()
 
 
-static func _terrain_color(h: float, dirt: Color, g_dark: Color, g_mid: Color, g_light: Color, rock: Color) -> Color:
+static func _terrain_color(h: float) -> Color:
 	if h < -4.0:
-		return dirt
+		return TERRAIN_DIRT
 	elif h < 0.0:
-		return dirt.lerp(g_dark, (h + 4.0) / 4.0)
+		return TERRAIN_DIRT.lerp(TERRAIN_GRASS_DARK, (h + 4.0) / 4.0)
 	elif h < 3.0:
-		return g_dark.lerp(g_mid, h / 3.0)
+		return TERRAIN_GRASS_DARK.lerp(TERRAIN_GRASS_MID, h / 3.0)
 	elif h < 6.0:
-		return g_mid.lerp(g_light, (h - 3.0) / 3.0)
+		return TERRAIN_GRASS_MID.lerp(TERRAIN_GRASS_LIGHT, (h - 3.0) / 3.0)
 	else:
-		return g_light.lerp(rock, clamp((h - 6.0) / 6.0, 0.0, 1.0))
+		return TERRAIN_GRASS_LIGHT.lerp(TERRAIN_ROCK, clamp((h - 6.0) / 6.0, 0.0, 1.0))
 
 
-static func _apply_slope(color: Color, face_normal: Vector3, rock: Color) -> Color:
+static func _apply_slope(color: Color, face_normal: Vector3) -> Color:
 	# 1.0 — горизонтальная грань, 0.0 — вертикальная.
 	var flatness := absf(face_normal.normalized().y)
-	return color.lerp(rock, 1.0 - smoothstep(0.7, 0.85, flatness))
+	return color.lerp(TERRAIN_ROCK, 1.0 - smoothstep(0.7, 0.85, flatness))
 
 
 static func flat_material(color: Color, rough: float = 0.9) -> ShaderMaterial:
