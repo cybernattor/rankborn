@@ -82,6 +82,14 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "Присед нажатием (а не удержанием)"
 
+[node name="QualityLabel" type="Label" parent="VBoxContainer"]
+layout_mode = 2
+text = "Графика"
+
+[node name="QualityOption" type="OptionButton" parent="VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+
 [node name="ResumeButton" type="Button" parent="VBoxContainer"]
 unique_name_in_owner = true
 layout_mode = 2

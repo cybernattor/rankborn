@@ -37,6 +37,8 @@ const MAX_SCORCH_MARKS := 50
 # Меши и материалы эффектов попадания общие для всех выстрелов:
 # создаются один раз, а не на каждое попадание.
 static var _impact_assets: Dictionary = {}
+## Материал трассера общий для всех выстрелов.
+static var _tracer_material: StandardMaterial3D
 const PREWARM_MARK_LIFETIME := 0.2
 
 
@@ -53,6 +55,7 @@ func _ready() -> void:
 	if player:
 		raycast.add_exception(player)
 	muzzle_light.light_energy = 0.0
+	muzzle_light.visible = false
 	_base_transform = transform
 
 
@@ -216,9 +219,15 @@ func _on_reload_finished() -> void:
 func _shoot_effects() -> void:
 	if muzzle_flash:
 		muzzle_flash.restart()
+	# Источник света включаем только на время вспышки: свет с нулевой яркостью
+	# всё равно обрабатывается рендером. На низкой/средней графике вспышки света нет.
+	if not GameSettings.dynamic_lights_enabled():
+		return
 	muzzle_light.light_energy = 1.5
+	muzzle_light.visible = true
 	get_tree().create_timer(0.04).timeout.connect(func():
 		muzzle_light.light_energy = 0.0
+		muzzle_light.visible = false
 	)
 
 
@@ -329,7 +338,7 @@ func _spawn_impact(pos: Vector3, normal: Vector3) -> void:
 	)
 
 	# --- Вспышка света на стене ---
-	if not is_ground:
+	if not is_ground and GameSettings.dynamic_lights_enabled():
 		var flash := OmniLight3D.new()
 		flash.light_color = Color(1.0, 0.92, 0.7)
 		flash.light_energy = 0.5
@@ -353,16 +362,17 @@ func _spawn_tracer(muzzle_pos: Vector3, hit_pos: Vector3) -> void:
 	if length < 0.1:
 		return
 
-	var tracer_mat := StandardMaterial3D.new()
-	tracer_mat.albedo_color = Color(1.0, 0.7, 0.1, 0.9)
-	tracer_mat.emission_enabled = true
-	tracer_mat.emission = Color(1.0, 0.6, 0.1)
-	tracer_mat.emission_energy_multiplier = 12.0
-	tracer_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	if not _tracer_material:
+		_tracer_material = StandardMaterial3D.new()
+		_tracer_material.albedo_color = Color(1.0, 0.7, 0.1, 0.9)
+		_tracer_material.emission_enabled = true
+		_tracer_material.emission = Color(1.0, 0.6, 0.1)
+		_tracer_material.emission_energy_multiplier = 12.0
+		_tracer_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 
 	var tracer_mesh := BoxMesh.new()
 	tracer_mesh.size = Vector3(0.015, 0.015, length)
-	tracer_mesh.material = tracer_mat
+	tracer_mesh.material = _tracer_material
 
 	var tracer := MeshInstance3D.new()
 	tracer.mesh = tracer_mesh

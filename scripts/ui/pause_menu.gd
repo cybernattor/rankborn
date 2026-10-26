@@ -10,13 +10,17 @@ extends Control
 @onready var invert_y_check: CheckBox = %InvertYCheck
 @onready var aim_toggle_check: CheckBox = %AimToggleCheck
 @onready var crouch_toggle_check: CheckBox = %CrouchToggleCheck
+@onready var quality_option: OptionButton = %QualityOption
 
 
 func _ready() -> void:
 	visible = false
 	resume_button.pressed.connect(_on_resume)
 	exit_button.pressed.connect(_on_exit_menu)
+	for i in GameSettings.QUALITY_NAMES.size():
+		quality_option.add_item(GameSettings.QUALITY_NAMES[i], i)
 	_load_settings_into_ui()
+	quality_option.item_selected.connect(_on_setting_changed.unbind(1))
 	mouse_sens_slider.value_changed.connect(_on_setting_changed.unbind(1))
 	touch_sens_slider.value_changed.connect(_on_setting_changed.unbind(1))
 	invert_y_check.toggled.connect(_on_setting_changed.unbind(1))
@@ -48,6 +52,7 @@ func _load_settings_into_ui() -> void:
 	invert_y_check.set_pressed_no_signal(GameSettings.invert_y)
 	aim_toggle_check.set_pressed_no_signal(GameSettings.aim_toggle)
 	crouch_toggle_check.set_pressed_no_signal(GameSettings.crouch_toggle)
+	quality_option.select(GameSettings.get_quality())
 
 
 func _on_setting_changed() -> void:
@@ -56,6 +61,7 @@ func _on_setting_changed() -> void:
 	GameSettings.invert_y = invert_y_check.button_pressed
 	GameSettings.aim_toggle = aim_toggle_check.button_pressed
 	GameSettings.crouch_toggle = crouch_toggle_check.button_pressed
+	GameSettings.graphics_quality = quality_option.get_selected_id()
 	GameSettings.save_settings()
 
 

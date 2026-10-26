@@ -47,6 +47,8 @@ func _ready() -> void:
 	mobile_ui.pause_pressed.connect(pause_menu.toggle)
 	pause_menu.visibility_changed.connect(_on_pause_visibility_changed)
 	_bind_local_player_ui()
+	_apply_graphics()
+	GameSettings.changed.connect(_apply_graphics)
 	_fade_in_with_prewarm()
 
 
@@ -65,6 +67,10 @@ func _build_lowpoly_terrain() -> void:
 	terrain_collision.backface_collision = true
 	col.shape = terrain_collision
 	ground_body.add_child(col)
+
+
+func _apply_graphics() -> void:
+	GameSettings.apply_graphics(get_viewport(), $DirectionalLight3D)
 
 
 func _fade_in_with_prewarm() -> void:

@@ -41,6 +41,7 @@ func _run() -> void:
 		var ground: Dictionary = world.get_world_3d().direct_space_state.intersect_ray(query)
 		_check(not ground.is_empty() and ground.collider == world.get_node("GroundBody"), "Маркер спавна находится под землёй")
 	_check_spawn_on_ground(world, player)
+	_check_graphics(world)
 	_check(player.get_node("WeaponHUD") != null and not remote.has_node("WeaponHUD"))
 	_check(player.get_node("Head/Camera3D/WeaponPivot/Rifle").get_multiplayer_authority() == 1)
 	_check(remote.get_node("Head/Camera3D/WeaponPivot/Rifle").get_multiplayer_authority() == 7)
@@ -216,6 +217,25 @@ func _check_spawn_on_ground(world: Node3D, player: CharacterBody3D) -> void:
 	var below := PhysicsRayQueryParameters3D.create(player.spawn_position + Vector3.UP, player.spawn_position - Vector3.UP * 5, 1)
 	var ground: Dictionary = space.intersect_ray(below)
 	_check(not ground.is_empty() and player.spawn_position.y - ground.position.y < 0.2, "Игрок появляется в воздухе")
+
+
+## Пресеты графики применяются к окну и солнцу и переключаются на лету.
+func _check_graphics(world: Node3D) -> void:
+	var settings: Node = root.get_node("GameSettings")
+	var sun: DirectionalLight3D = world.get_node("DirectionalLight3D")
+	var saved: int = settings.graphics_quality
+	_check(settings.default_quality() == settings.Quality.HIGH, "На ПК графика по умолчанию не высокая")
+	settings.graphics_quality = settings.Quality.LOW
+	settings.changed.emit()
+	_check(not sun.shadow_enabled and root.scaling_3d_scale < 1.0 and root.msaa_3d == Viewport.MSAA_DISABLED \
+			and not settings.dynamic_lights_enabled(), "Низкая графика не применилась")
+	settings.graphics_quality = settings.Quality.HIGH
+	settings.changed.emit()
+	_check(sun.shadow_enabled and is_equal_approx(root.scaling_3d_scale, 1.0) \
+			and sun.directional_shadow_mode == DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS \
+			and settings.dynamic_lights_enabled(), "Высокая графика не применилась")
+	settings.graphics_quality = saved
+	settings.changed.emit()
 
 
 func _check_hud(player: CharacterBody3D) -> void:

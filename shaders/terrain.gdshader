@@ -1,5 +1,7 @@
 shader_type spatial;
-render_mode blend_mix, depth_draw_opaque, cull_back, diffuse_burley, specular_schlick_ggx;
+// Ламберт без бликов: земля матовая (roughness 0.85), блик почти не виден, а считался
+// для каждого пикселя земли — а она занимает большую часть кадра.
+render_mode blend_mix, depth_draw_opaque, cull_back, diffuse_lambert, specular_disabled;
 
 // ============================================================
 // Шейдер террейна — неподвижный low-poly.
