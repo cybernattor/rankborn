@@ -96,7 +96,7 @@ All input goes through Input actions (`move_*`, `shoot`, `aim`, `jump`, `crouch`
 
 ## Design reference
 
-The meta-game (front line, logistics, trenches, player-driven leadership via ranks and regiments — no single commander) is based on **Foxhole**; Rankborn's difference is 3D shooter combat (not isometric), a modular weapon designer and PC + mobile crossplay. Rationale, open questions and the crossplay fairness rules (no aim assist for mouse; slowdown/friction only, never snap, for touch/gamepad; fairness via combat design first) are in `docs/design.md`.
+The meta-game (front line, logistics, trenches, player-driven leadership via ranks and regiments — no single commander) is based on **Foxhole**; the camera is top-down like Foxhole too, so Rankborn's difference is a modular weapon designer, PC + mobile crossplay, training-gated ranks and its own faction visuals. Rationale, open questions and the crossplay fairness rules (no aim assist for mouse; slowdown/friction only, never snap, for touch/gamepad; fairness via combat design first) are in `docs/design.md`.
 
 ## Reference
 
