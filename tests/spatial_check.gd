@@ -69,15 +69,23 @@ func _run() -> void:
 	player.global_position = Vector3(0, 20, 0)
 	remote.global_position = Vector3(30, 20, 30)
 	await _check_shots(world, player, rifle)
-	player.health_component.take_damage(9999.0)
+	player.set_process(true)  # камера смерти живёт в _process
+	player.health_component.take_damage(9999.0, 7)
 	await process_frame
 	_check(not player.visible and player.get_node("CollisionShape3D").disabled)
+	# Экран смерти: кто убил, HUD оружия скрыт, камера падает к земле.
+	_check(player.death_screen.is_shown() and "Remote" in player.death_screen.get_killer_text(), "Нет экрана смерти с ником убийцы")
+	_check(not player.weapon_hud.visible, "HUD оружия виден после смерти")
+	await create_timer(1.0).timeout
+	_check(player.head.position.y < player.STAND_HEAD_Y * 0.5 and player.camera.rotation.z > 0.3, "Камера не падает при смерти")
 	_check(world.game_mode.get_score(1).deaths == 1)
 	# Перед смертью смотрим вбок и вниз — после респавна взгляд должен вернуться к центру карты.
 	player.rotation.y = PI * 0.5
 	player.head.rotation.x = -0.8
-	await create_timer(2.2).timeout
+	await create_timer(1.2).timeout
 	_check(player.visible and not player.get_node("CollisionShape3D").disabled)
+	_check(not player.death_screen.is_shown() and player.weapon_hud.visible, "Экран смерти не скрылся после респавна")
+	_check(is_zero_approx(player.camera.rotation.z) and is_equal_approx(player.head.position.y, player.STAND_HEAD_Y), "Камера не вернулась после респавна")
 	var to_center: Vector3 = (player.MAP_CENTER - player.global_position) * Vector3(1, 0, 1)
 	_check((-player.global_basis.z).dot(to_center.normalized()) > 0.99, "После респавна игрок смотрит не к центру карты")
 	_check(is_zero_approx(player.head.rotation.x), "После респавна сохраняется наклон головы")

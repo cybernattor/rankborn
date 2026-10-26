@@ -43,7 +43,9 @@ func take_damage(amount: float, attacker_id: int = -1) -> void:
 		# Сообщаем атакующему, что это был смертельный удар — только у него
 		# должен сработать красный kill-маркер, а не на основании локальной,
 		# несинхронизированной копии is_alive (которая всегда была бы stale).
-		if attacker_id > 0 and attacker_id != get_multiplayer_authority():
+		# Стрелок мог выйти, пока летел урон, — RPC неизвестному пиру даёт ошибку.
+		if attacker_id > 0 and attacker_id != get_multiplayer_authority() \
+				and attacker_id in multiplayer.get_peers():
 			_notify_kill.rpc_id(attacker_id)
 
 

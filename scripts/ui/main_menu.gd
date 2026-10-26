@@ -286,10 +286,20 @@ func _set_connect_ui_enabled(enabled: bool) -> void:
 	leave_button.visible = not enabled
 
 
+# Peer id не показываем: у хоста он всегда 1, у клиентов — случайное число от ENet
+# (например 222456567658), игроку это ничего не говорит. Вместо него — кто хост и кто ты.
 func _update_player_list() -> void:
 	player_list.clear()
+	var my_id := multiplayer.get_unique_id() if multiplayer.has_multiplayer_peer() else 0
 	for id in NetworkManager.players:
-		var label: String = "%s (%d)" % [NetworkManager.players[id].name, id]
+		var tags: Array[String] = []
+		if id == 1:
+			tags.append("хост")
+		if id == my_id:
+			tags.append("вы")
+		var label: String = NetworkManager.players[id].name
+		if not tags.is_empty():
+			label += "  (%s)" % ", ".join(tags)
 		player_list.add_item(label)
 
 

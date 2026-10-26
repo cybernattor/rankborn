@@ -23,6 +23,15 @@ const MAP_CENTER := Vector3.ZERO
 ## Ввод заблокирован меню (пауза не останавливает сетевую игру).
 var input_blocked: bool = false
 
+## HUD и экран смерти есть только у локального игрока.
+var weapon_hud: CanvasLayer
+var death_screen: DeathScreen
+## Камера при смерти опускается к земле и заваливается набок — видно, что упал,
+## а не что игра зависла.
+const DEATH_HEAD_Y := 0.35
+const DEATH_ROLL := 0.6
+const DEATH_CAMERA_SPEED := 4.0
+
 # Отдача камеры
 var _recoil_x: float = 0.0
 var _recoil_recovery := 8.0
@@ -66,6 +75,9 @@ func _ready() -> void:
 		# Своё тело не рисуем (камера внутри головы), но тень от него оставляем.
 		body_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY
 		_setup_weapon_hud()
+		death_screen = DeathScreen.new()
+		death_screen.name = "DeathScreen"
+		add_child(death_screen)
 
 		# Подключаем смерть → StateMachine
 		health_component.died.connect(_on_died)
@@ -92,6 +104,7 @@ func _setup_weapon_hud() -> void:
 	hud.name = "WeaponHUD"
 	add_child(hud)
 	hud.setup(weapon_manager)
+	weapon_hud = hud
 
 
 func setup_spawn(pos: Vector3) -> void:
@@ -108,12 +121,19 @@ func face_map_center() -> void:
 	if to_center.length_squared() > 0.01:
 		rotation.y = atan2(-to_center.x, -to_center.z)
 	head.rotation.x = 0.0
+	head.position.y = get_head_height()
+	camera.rotation.z = 0.0
 	_recoil_x = 0.0
 
 
 ## Можно ли сейчас управлять персонажем (жив и не открыто меню).
 func can_control() -> bool:
 	return health_component.is_alive and not input_blocked
+
+
+## Высота головы (камеры) для текущей позы.
+func get_head_height() -> float:
+	return CROUCH_HEAD_Y if is_crouching else STAND_HEAD_Y
 
 
 ## Текущий рост капсулы — для хитбоксов и проверки хедшота.
@@ -185,11 +205,16 @@ func _unhandled_input(event: InputEvent) -> void:
 func _process(delta: float) -> void:
 	# Голова плавно опускается при приседании — у всех пиров, чтобы оружие
 	# удалённого игрока было на правильной высоте.
-	var head_target := CROUCH_HEAD_Y if is_crouching else STAND_HEAD_Y
-	head.position.y = lerpf(head.position.y, head_target, 1.0 - exp(-CROUCH_TRANSITION_SPEED * delta))
-
 	if not is_multiplayer_authority():
+		head.position.y = lerpf(head.position.y, get_head_height(), 1.0 - exp(-CROUCH_TRANSITION_SPEED * delta))
 		return
+
+	if health_component.is_alive:
+		head.position.y = lerpf(head.position.y, get_head_height(), 1.0 - exp(-CROUCH_TRANSITION_SPEED * delta))
+	else:
+		var weight := 1.0 - exp(-DEATH_CAMERA_SPEED * delta)
+		head.position.y = lerpf(head.position.y, DEATH_HEAD_Y, weight)
+		camera.rotation.z = lerpf(camera.rotation.z, DEATH_ROLL, weight)
 
 	# Геймпад: правый стик
 	var stick := Input.get_vector("look_left", "look_right", "look_up", "look_down")
@@ -288,13 +313,26 @@ func _on_life_state_changed(alive: bool) -> void:
 		_crouch_toggled = false
 		if is_multiplayer_authority():
 			is_crouching = false
+	if is_multiplayer_authority():
+		if weapon_hud:
+			weapon_hud.visible = alive
+		if alive and death_screen:
+			death_screen.hide_death()
 
 
 func _on_died(attacker_id: int) -> void:
 	state_machine.change_state("DeadState")
+	death_screen.show_death(_killer_name(attacker_id), DeadState.RESPAWN_DELAY)
 	# Только сама жертва (authority своего HealthComponent, т.е. эта ветка)
 	# знает о своей смерти — сообщаем хосту, чтобы GameMode/счёт/killfeed
 	# обновились одинаково у всех.
 	var game_mode := get_tree().current_scene.get_node_or_null("GameMode")
 	if game_mode:
 		game_mode.report_death.rpc_id(1, multiplayer.get_unique_id(), attacker_id)
+
+
+## Ник убийцы; пусто — погиб сам (зона смерти, свой урон).
+func _killer_name(attacker_id: int) -> String:
+	if attacker_id <= 0 or attacker_id == get_multiplayer_authority():
+		return ""
+	return NetworkManager.players.get(attacker_id, {}).get("name", NetworkManager.sanitize_name("", attacker_id))

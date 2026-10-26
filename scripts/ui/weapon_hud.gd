@@ -46,6 +46,10 @@ func _ready() -> void:
 		reload_bar.visible = false
 	if hit_marker:
 		hit_marker.visible = false
+	# Патроны и перезарядка рисуются поверх затемнения прицела, иначе в прицеле
+	# их не видно (узлы рисуются в порядке дерева, ScopeOverlay шёл позже).
+	var ammo_box: Control = $UILayer/BottomRight
+	ammo_box.move_to_front()
 	if OS.is_debug_build():
 		_fps_label = Label.new()
 		_fps_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
