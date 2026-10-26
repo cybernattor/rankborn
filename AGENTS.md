@@ -2,7 +2,7 @@
 
 ## What this is
 
-Godot 4.7 multiplayer shooter/strategy game (currently first-person; over-the-shoulder camera is the working decision). GDScript only. No C#, no build system outside Godot.
+Godot 4.7 multiplayer shooter/strategy game. The current build is first-person, but the camera is decided: isometric top-down like Foxhole (roadmap phase 1.5 replaces the first-person code — don't invest in first-person-only features). GDScript only. No C#, no build system outside Godot.
 
 ## Running the project
 
@@ -96,6 +96,6 @@ The meta-game (front line, logistics, trenches, player-driven leadership via ran
 
 - Architecture doc (actual code structure, network flow): `docs/architecture.md`
 - Shooting parameters and ideas: `docs/shooting.md`
-- Design decisions (Foxhole, crossplay fairness, leadership, era/factions/logistics floor; camera — working decision TPS over the shoulder + first-person ADS + tactical map, to be confirmed by prototype in roadmap phase 1.5; scale assumption up to 64 players per sector): `docs/design.md`
+- Design decisions (Foxhole, crossplay fairness, leadership, era/factions/logistics floor; camera — decided: isometric top-down like Foxhole, fixed angle, twin-stick aiming, fog of war decided by the host; prototype criteria in section 3; scale assumption up to 64 players per sector): `docs/design.md`
 - Fix plan by phase, with acceptance criteria: `docs/roadmap.md`
 - Project description: `README.md` (Russian)
