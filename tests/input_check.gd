@@ -327,11 +327,20 @@ func _check_touch() -> void:
 	_check(_move_vector() == Vector2.ZERO, "Меню не отпускает зажатые действия")
 	await _touch(6, start, false)
 	await _touch(7, ui._buttons.pause.center, false)
+	# «Выйти» с первого касания не выходит, а просит подтверждения; кнопки разнесены.
+	var exit_button: Button = pause_menu.get_node("%ExitMenuButton")
+	var resume_rect: Rect2 = pause_menu.get_node("%ResumeButton").get_global_rect()
+	_check(exit_button.get_global_rect().position.y - resume_rect.end.y > 100.0, "«Выйти» и «Продолжить» стоят рядом")
+	var exit_center := exit_button.get_global_rect().get_center()
+	await _touch(0, exit_center, true)
+	await _touch(0, exit_center, false)
+	_check(current_scene == world and pause_menu._exit_armed, "Выход из матча с первого нажатия")
 	var resume: Button = pause_menu.get_node("%ResumeButton")
 	var center := resume.get_global_rect().get_center()
 	await _touch(0, center, true)
 	await _touch(0, center, false)
 	_check(not pause_menu.visible and ui.visible, "Кнопки меню не нажимаются касанием")
+	_check(not pause_menu._exit_armed and pause_menu.exit_button.text == pause_menu.EXIT_TEXT, "Подтверждение выхода остаётся после закрытия меню")
 	_check_touch_layout(size)
 
 

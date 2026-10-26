@@ -2,6 +2,18 @@ extends Control
 
 ## Меню паузы. В сетевой игре мир не останавливается: меню только блокирует
 ## ввод игрока (см. game_scene._on_pause_visibility_changed).
+##
+## «Продолжить» — сразу под заголовком, «Выйти в меню» — в самом низу через отступ
+## и только со второго нажатия: рядом стоящие кнопки на планшете путали, и из матча
+## выходили случайно.
+
+const EXIT_TEXT := "Выйти в меню"
+const EXIT_CONFIRM_TEXT := "Точно выйти? Нажми ещё раз"
+## Сколько секунд ждём второго нажатия.
+const EXIT_CONFIRM_TIME := 3.0
+
+var _exit_armed: bool = false
+var _exit_timer: SceneTreeTimer
 
 @onready var resume_button: Button = %ResumeButton
 @onready var exit_button: Button = %ExitMenuButton
@@ -31,12 +43,14 @@ func toggle() -> void:
 	if visible:
 		_resume_game()
 	else:
+		_disarm_exit()
 		visible = true
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 		_load_settings_into_ui()
 
 
 func _resume_game() -> void:
+	_disarm_exit()
 	visible = false
 	if not GameSettings.is_touch_device():
 		Input.mouse_mode = Input.MOUSE_MODE_CONFINED_HIDDEN
@@ -62,6 +76,17 @@ func _on_resume() -> void:
 
 
 func _on_exit_menu() -> void:
+	if not _exit_armed:
+		_exit_armed = true
+		exit_button.text = EXIT_CONFIRM_TEXT
+		exit_button.add_theme_color_override("font_color", Color(1.0, 0.45, 0.4))
+		_exit_timer = get_tree().create_timer(EXIT_CONFIRM_TIME)
+		var timer := _exit_timer
+		timer.timeout.connect(func():
+			if _exit_timer == timer:
+				_disarm_exit()
+		)
+		return
 	NetworkManager.disconnect_game()
 	get_tree().change_scene_to_file("res://scenes/main/main_menu.tscn")
 
@@ -70,3 +95,10 @@ func _on_exit_menu() -> void:
 func _update_auto_label() -> void:
 	var index := quality_option.get_item_index(GameSettings.QUALITY_AUTO)
 	quality_option.set_item_text(index, "Авто (%s)" % GameSettings.QUALITY_NAMES[GameSettings.get_quality()].to_lower())
+
+
+func _disarm_exit() -> void:
+	_exit_armed = false
+	_exit_timer = null
+	exit_button.text = EXIT_TEXT
+	exit_button.remove_theme_color_override("font_color")
