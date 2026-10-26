@@ -6,13 +6,6 @@ signal changed
 
 const SETTINGS_PATH := "user://settings.cfg"
 
-## Радиан поворота на один физический пиксель мыши (screen_relative).
-var mouse_sensitivity: float = 0.002
-## Радиан поворота на один пиксель свайпа по экрану.
-var touch_sensitivity: float = 0.004
-## Скорость поворота правым стиком геймпада, рад/с при полном отклонении.
-var gamepad_look_speed: float = 3.0
-var invert_y: bool = false
 ## true — прицеливание переключается нажатием, false — пока кнопка зажата.
 var aim_toggle: bool = false
 ## true — присед переключается нажатием, false — пока кнопка зажата.
@@ -51,10 +44,6 @@ func load_settings() -> void:
 	var cfg := ConfigFile.new()
 	if cfg.load(SETTINGS_PATH) != OK:
 		return
-	mouse_sensitivity = cfg.get_value("controls", "mouse_sensitivity", mouse_sensitivity)
-	touch_sensitivity = cfg.get_value("controls", "touch_sensitivity", touch_sensitivity)
-	gamepad_look_speed = cfg.get_value("controls", "gamepad_look_speed", gamepad_look_speed)
-	invert_y = cfg.get_value("controls", "invert_y", invert_y)
 	aim_toggle = cfg.get_value("controls", "aim_toggle", aim_toggle)
 	crouch_toggle = cfg.get_value("controls", "crouch_toggle", crouch_toggle)
 	player_name = cfg.get_value("profile", "player_name", player_name)
@@ -65,10 +54,6 @@ func load_settings() -> void:
 
 func save_settings() -> void:
 	var cfg := ConfigFile.new()
-	cfg.set_value("controls", "mouse_sensitivity", mouse_sensitivity)
-	cfg.set_value("controls", "touch_sensitivity", touch_sensitivity)
-	cfg.set_value("controls", "gamepad_look_speed", gamepad_look_speed)
-	cfg.set_value("controls", "invert_y", invert_y)
 	cfg.set_value("controls", "aim_toggle", aim_toggle)
 	cfg.set_value("controls", "crouch_toggle", crouch_toggle)
 	cfg.set_value("profile", "player_name", player_name)

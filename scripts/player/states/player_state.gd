@@ -32,17 +32,25 @@ func _wants_jump() -> bool:
 	return player.can_control() and Input.is_action_just_pressed("jump") and player.is_on_floor()
 
 
-## Спринт — только вперёд, не в прицеле и не в приседе.
+## Спринт — только примерно туда, куда смотришь, не в прицеле и не в приседе:
+## пятиться и бежать боком на полной скорости нельзя.
+const SPRINT_MAX_ANGLE_COS := 0.5
+
+
 func _move_speed(input_dir: Vector2) -> float:
 	if player.is_crouching:
 		return CROUCH_SPEED
-	if Input.is_action_pressed("sprint") and input_dir.y < -0.5 and not player.is_aiming:
-		return SPRINT_SPEED
+	if Input.is_action_pressed("sprint") and input_dir.length() > 0.5 and not player.is_aiming:
+		var facing: Vector3 = player.get_aim_direction()
+		if Vector2(facing.x, facing.z).dot(input_dir.normalized()) >= SPRINT_MAX_ANGLE_COS:
+			return SPRINT_SPEED
 	return SPEED
 
 
+## Камера сверху не вращается, поэтому движение — в осях мира: «вверх» по экрану
+## и стику — это −Z, независимо от того, куда смотрит персонаж.
 func _apply_horizontal(input_dir: Vector2, accel: float, delta: float) -> void:
-	var direction := player.transform.basis * Vector3(input_dir.x, 0, input_dir.y)
+	var direction := Vector3(input_dir.x, 0, input_dir.y)
 	var target := direction * _move_speed(input_dir)
 	player.velocity.x = move_toward(player.velocity.x, target.x, accel * delta)
 	player.velocity.z = move_toward(player.velocity.z, target.z, accel * delta)

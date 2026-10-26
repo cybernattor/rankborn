@@ -5,9 +5,6 @@ extends Control
 
 @onready var resume_button: Button = %ResumeButton
 @onready var exit_button: Button = %ExitMenuButton
-@onready var mouse_sens_slider: HSlider = %MouseSensSlider
-@onready var touch_sens_slider: HSlider = %TouchSensSlider
-@onready var invert_y_check: CheckBox = %InvertYCheck
 @onready var aim_toggle_check: CheckBox = %AimToggleCheck
 @onready var crouch_toggle_check: CheckBox = %CrouchToggleCheck
 @onready var quality_option: OptionButton = %QualityOption
@@ -23,9 +20,6 @@ func _ready() -> void:
 	GameSettings.changed.connect(_update_auto_label)
 	_load_settings_into_ui()
 	quality_option.item_selected.connect(_on_setting_changed.unbind(1))
-	mouse_sens_slider.value_changed.connect(_on_setting_changed.unbind(1))
-	touch_sens_slider.value_changed.connect(_on_setting_changed.unbind(1))
-	invert_y_check.toggled.connect(_on_setting_changed.unbind(1))
 	aim_toggle_check.toggled.connect(_on_setting_changed.unbind(1))
 	crouch_toggle_check.toggled.connect(_on_setting_changed.unbind(1))
 	# На тач-экранах прицел и присед всегда переключаются нажатием.
@@ -45,13 +39,10 @@ func toggle() -> void:
 func _resume_game() -> void:
 	visible = false
 	if not GameSettings.is_touch_device():
-		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		Input.mouse_mode = Input.MOUSE_MODE_CONFINED_HIDDEN
 
 
 func _load_settings_into_ui() -> void:
-	mouse_sens_slider.set_value_no_signal(GameSettings.mouse_sensitivity)
-	touch_sens_slider.set_value_no_signal(GameSettings.touch_sensitivity)
-	invert_y_check.set_pressed_no_signal(GameSettings.invert_y)
 	aim_toggle_check.set_pressed_no_signal(GameSettings.aim_toggle)
 	crouch_toggle_check.set_pressed_no_signal(GameSettings.crouch_toggle)
 	var choice := GameSettings.QUALITY_AUTO if GameSettings.is_auto_quality() else GameSettings.graphics_quality
@@ -60,9 +51,6 @@ func _load_settings_into_ui() -> void:
 
 
 func _on_setting_changed() -> void:
-	GameSettings.mouse_sensitivity = mouse_sens_slider.value
-	GameSettings.touch_sensitivity = touch_sens_slider.value
-	GameSettings.invert_y = invert_y_check.button_pressed
 	GameSettings.aim_toggle = aim_toggle_check.button_pressed
 	GameSettings.crouch_toggle = crouch_toggle_check.button_pressed
 	GameSettings.set_quality_choice(quality_option.get_selected_id())

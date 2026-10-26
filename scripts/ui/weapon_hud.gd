@@ -1,6 +1,6 @@
 extends CanvasLayer
 
-## HUD оружия: прицел, патроны, индикатор перезарядки, scope, hit marker.
+## HUD оружия: прицел в точке прицеливания, патроны, индикатор перезарядки, hit marker.
 ## Подключается к WeaponManager, а не напрямую к оружию.
 
 @onready var crosshair: Control = $UILayer/Crosshair
@@ -11,13 +11,6 @@ extends CanvasLayer
 @onready var dot: Panel = $UILayer/Crosshair/Dot
 @onready var ammo_label: Label = $UILayer/BottomRight/AmmoLabel
 @onready var reload_bar: ProgressBar = $UILayer/BottomRight/ReloadBar
-@onready var scope_overlay: ColorRect = $UILayer/ScopeOverlay
-@onready var scope_ring: Panel = $UILayer/ScopeRing
-@onready var scope_dot: ColorRect = $UILayer/ScopeDot
-@onready var scope_cross_v: ColorRect = $UILayer/ScopeCrossV
-@onready var scope_cross_h: ColorRect = $UILayer/ScopeCrossH
-@onready var scope_cross_bottom: ColorRect = $UILayer/ScopeCrossBottom
-@onready var scope_cross_right: ColorRect = $UILayer/ScopeCrossRight
 @onready var hit_marker: Control = $UILayer/HitMarker
 
 var _weapon_manager: WeaponManager
@@ -33,8 +26,8 @@ const SPREAD_SPEED := 16.0
 # Hit marker
 var _hit_marker_tween: Tween
 
-## На тач-экране патроны поднимаются над кнопками справа внизу, иначе FIRE их закрывает.
-const TOUCH_AMMO_OFFSET_Y := -340.0
+## На тач-экране патроны — сверху по центру: справа внизу стик прицела и кнопки.
+const TOUCH_AMMO_MARGIN_TOP := 12.0
 ## Счётчик кадров в отладочных сборках — чтобы тестеры могли назвать цифры.
 var _fps_label: Label
 var _touch_layout: bool = false
@@ -46,10 +39,10 @@ func _ready() -> void:
 		reload_bar.visible = false
 	if hit_marker:
 		hit_marker.visible = false
-	# Патроны и перезарядка рисуются поверх затемнения прицела, иначе в прицеле
-	# их не видно (узлы рисуются в порядке дерева, ScopeOverlay шёл позже).
-	var ammo_box: Control = $UILayer/BottomRight
-	ammo_box.move_to_front()
+	# Прицел и хитмаркер стоят не в центре экрана, а там, куда целится игрок
+	# (камера сверху): позицию задаём сами, от левого верхнего угла.
+	for marker: Control in [crosshair, hit_marker]:
+		marker.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	if OS.is_debug_build():
 		_fps_label = Label.new()
 		_fps_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -110,14 +103,17 @@ func _process(delta: float) -> void:
 	elif reload_bar:
 		reload_bar.visible = false
 
-	# Scope overlay
-	var aiming := false
-	if _player and "is_aiming" in _player:
-		aiming = _player.is_aiming
-	_set_scope_visible(aiming)
-
+	_update_crosshair_position()
 	# Динамический прицел
 	_update_crosshair_spread(delta)
+
+
+func _update_crosshair_position() -> void:
+	if not _player or not "aim_point" in _player:
+		return
+	var screen_pos: Vector2 = _player.camera.unproject_position(_player.aim_point)
+	crosshair.position = screen_pos
+	hit_marker.position = screen_pos
 
 
 func _update_crosshair_spread(delta: float) -> void:
@@ -157,10 +153,14 @@ func _calculate_spread() -> float:
 
 	if not weapon is Rifle:
 		return 0.0
-	var camera: Camera3D = _player.get_node("Head/Camera3D")
-	var half_height := get_viewport().get_visible_rect().size.y * 0.5
-	var focal_length := half_height / tan(deg_to_rad(camera.fov) * 0.5)
-	return maxf(0.0, tan(weapon.get_spread_angle()) * focal_length - BASE_GAP)
+	# Радиус конуса разброса на дальности прицела, переведённый в пиксели экрана.
+	var camera: Camera3D = _player.camera
+	var aim: Vector3 = _player.aim_point
+	var distance: float = _player.get_shot_origin().distance_to(aim)
+	var side: Vector3 = _player.get_aim_direction().cross(Vector3.UP).normalized()
+	var edge := aim + side * distance * tan(weapon.get_spread_angle())
+	var radius := camera.unproject_position(aim).distance_to(camera.unproject_position(edge))
+	return maxf(0.0, radius - BASE_GAP)
 
 
 func _update_touch_layout() -> void:
@@ -168,29 +168,11 @@ func _update_touch_layout() -> void:
 	if touch == _touch_layout:
 		return
 	_touch_layout = touch
-	var shift := TOUCH_AMMO_OFFSET_Y if touch else -TOUCH_AMMO_OFFSET_Y
 	var ammo_box: Control = $UILayer/BottomRight
-	ammo_box.offset_top += shift
-	ammo_box.offset_bottom += shift
-
-
-func _set_scope_visible(show_scope: bool) -> void:
-	if crosshair:
-		crosshair.visible = not show_scope
-	if scope_overlay:
-		scope_overlay.visible = show_scope
-	if scope_ring:
-		scope_ring.visible = show_scope
-	if scope_dot:
-		scope_dot.visible = show_scope
-	if scope_cross_v:
-		scope_cross_v.visible = show_scope
-	if scope_cross_h:
-		scope_cross_h.visible = show_scope
-	if scope_cross_bottom:
-		scope_cross_bottom.visible = show_scope
-	if scope_cross_right:
-		scope_cross_right.visible = show_scope
+	if touch:
+		ammo_box.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP, Control.PRESET_MODE_KEEP_SIZE, int(TOUCH_AMMO_MARGIN_TOP))
+	else:
+		ammo_box.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT, Control.PRESET_MODE_KEEP_SIZE, 20)
 
 
 func _update_ammo() -> void:

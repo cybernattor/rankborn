@@ -10,6 +10,7 @@
 [ext_resource type="Script" uid="uid://boy20202wehro" path="res://scripts/player/states/dead_state.gd" id="8_3l2bb"]
 [ext_resource type="Script" uid="uid://b6w7jgoi1s5qr" path="res://scripts/player/states/respawn_state.gd" id="9_2pt4v"]
 [ext_resource type="Script" uid="uid://cfchfmgc0u8k3" path="res://scripts/weapons/weapon_manager.gd" id="10_s7tvo"]
+[ext_resource type="Script" path="res://scripts/player/iso_camera.gd" id="11_isocam"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_collider"]
 radius = 0.4
@@ -22,15 +23,12 @@ properties/0/replication_mode = 1
 properties/1/path = NodePath(".:rotation")
 properties/1/spawn = true
 properties/1/replication_mode = 1
-properties/2/path = NodePath("Head:rotation")
+properties/2/path = NodePath("HealthComponent:is_alive")
 properties/2/spawn = true
-properties/2/replication_mode = 1
-properties/3/path = NodePath("HealthComponent:is_alive")
+properties/2/replication_mode = 2
+properties/3/path = NodePath(".:is_crouching")
 properties/3/spawn = true
 properties/3/replication_mode = 2
-properties/4/path = NodePath(".:is_crouching")
-properties/4/spawn = true
-properties/4/replication_mode = 2
 [node name="Player" type="CharacterBody3D" unique_id=1031594835]
 collision_layer = 2
 collision_mask = 3
@@ -43,12 +41,14 @@ shape = SubResource("CapsuleShape3D_collider")
 [node name="Head" type="Node3D" parent="." unique_id=19233428]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.6, 0)
 
-[node name="Camera3D" type="Camera3D" parent="Head" unique_id=827431614]
+[node name="WeaponPivot" type="Node3D" parent="Head" unique_id=1624523671]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.28, -0.4, -0.2)
 
-[node name="WeaponPivot" type="Node3D" parent="Head/Camera3D" unique_id=1624523671]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.25, -0.2, -0.4)
+[node name="Rifle" parent="Head/WeaponPivot" unique_id=2058146764 instance=ExtResource("2")]
 
-[node name="Rifle" parent="Head/Camera3D/WeaponPivot" unique_id=2058146764 instance=ExtResource("2")]
+[node name="IsoCamera" type="Camera3D" parent="." unique_id=827431614]
+top_level = true
+script = ExtResource("11_isocam")
 
 [node name="MultiplayerSynchronizer" type="MultiplayerSynchronizer" parent="." unique_id=719453592]
 replication_config = SubResource("SceneReplicationConfig_player")
@@ -77,4 +77,4 @@ script = ExtResource("9_2pt4v")
 
 [node name="WeaponManager" type="Node" parent="." unique_id=1021333587]
 script = ExtResource("10_s7tvo")
-weapon_slots = Array[NodePath]([NodePath("../Head/Camera3D/WeaponPivot/Rifle")])
+weapon_slots = Array[NodePath]([NodePath("../Head/WeaponPivot/Rifle")])

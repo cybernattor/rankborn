@@ -3,18 +3,22 @@ class_name Rifle
 
 ## Винтовка — hitscan-оружие с распространением, отдачей и эффектами попаданий.
 
-# --- Параметры распространения (spread/bloom) ---
-const BLOOM_PER_SHOT := 0.01
-const BLOOM_DECAY_SPEED := 2.0
-const MAX_BLOOM := 0.3
+# --- Параметры распространения (spread/bloom), радианы конуса ---
+# С камерой сверху конус виден на земле, поэтому он шире, чем был от первого лица:
+# прицеливание сужает его — это главная награда за остановку и ADS (как у Foxhole).
+const BLOOM_PER_SHOT := 0.012
+const BLOOM_DECAY_SPEED := 1.5
+const MAX_BLOOM := 0.2
 
-const SPREAD_IDLE := 0.005
-const SPREAD_WALK := 0.015
-const SPREAD_RUN := 0.04
-const SPREAD_ADS := 0.002
-const SPREAD_ADS_FIRING := 0.005
-const SPREAD_HIPFIRE_FIRING := 0.02
-const SPREAD_WALK_FIRING := 0.015
+const SPREAD_IDLE := 0.035
+const SPREAD_WALK := 0.06
+const SPREAD_RUN := 0.11
+const SPREAD_ADS := 0.01
+const SPREAD_ADS_FIRING := 0.018
+const SPREAD_HIPFIRE_FIRING := 0.05
+const SPREAD_WALK_FIRING := 0.07
+## Дальность выстрела, м.
+const RANGE := 80.0
 
 # Выше скорости ходьбы (PlayerState.SPEED): бег появится вместе со спринтом.
 const SPEED_RUN_THRESHOLD := PlayerState.SPEED + 0.5
@@ -104,10 +108,6 @@ func shoot() -> void:
 	translate(Vector3(0, 0, 0.035))
 	rotate_x(0.01)
 
-	# Отдача камеры
-	if player and player.has_method("apply_recoil"):
-		player.apply_recoil(randf_range(0.008, 0.015))
-
 	# Трассер
 	var muzzle_pos := muzzle_flash.global_position
 	var hit_pos := raycast.get_collision_point() if raycast.is_colliding() else raycast.to_global(raycast.target_position)
@@ -150,15 +150,26 @@ func shoot() -> void:
 	is_firing = false
 
 
+## Луч выстрела: от оружия к точке прицеливания игрока, отклонённый в пределах конуса.
+## Мир трёхмерный: высота и укрытия останавливают пулю, а не плоскость.
 func _apply_bullet_spread() -> void:
 	var player := _get_player()
 	if not player:
 		return
-	var camera: Camera3D = player.get_node("Head/Camera3D")
-	raycast.global_transform = camera.global_transform
+	var origin: Vector3 = player.get_shot_origin()
+	var to_target: Vector3 = player.aim_point - origin
+	if to_target.length_squared() < 0.01:
+		to_target = player.get_aim_direction()
 	var spread := get_spread_angle()
-	var offset := Vector2(randf_range(-spread, spread), randf_range(-spread, spread))
-	raycast.target_position = Vector3(tan(offset.x), tan(offset.y), -1.0).normalized() * 100.0
+	var direction := to_target.normalized()
+	# Отклонение по горизонтали — весь конус, по вертикали — треть: сверху ошибка
+	# видна в основном вбок, а вертикальная уводила бы пули в землю или небо.
+	direction = direction.rotated(Vector3.UP, randf_range(-spread, spread))
+	var side := direction.cross(Vector3.UP).normalized()
+	if side.length_squared() > 0.0:
+		direction = direction.rotated(side, randf_range(-spread, spread) / 3.0)
+	raycast.global_transform = Transform3D(Basis.IDENTITY, origin)
+	raycast.target_position = direction * RANGE
 	raycast.force_raycast_update()
 
 

@@ -1,6 +1,11 @@
 class_name MeshUtils
 
-const TERRAIN_HEIGHT := 12.0
+## Амплитуда холмов, м. С камерой сверху склоны почти не читаются, а крутой склон
+## делает укрытия бесполезными (стоящий выше смотрит поверх стены) — поэтому холмы
+## пологие, как у Foxhole. Было 12 м, когда камера была от первого лица.
+const TERRAIN_HEIGHT := 4.0
+## Пороги цветов земли подобраны под амплитуду 12 м — высоту приводим к ней.
+const TERRAIN_COLOR_REFERENCE := 12.0
 const TERRAIN_DIRT := Color(0.55, 0.38, 0.22)
 const TERRAIN_GRASS_DARK := Color(0.25, 0.50, 0.18)
 const TERRAIN_GRASS_MID := Color(0.35, 0.62, 0.22)
@@ -86,7 +91,7 @@ static func make_terrain(size: float, resolution: int, seed_val: int, smooth: bo
 			var hd := verts[maxi(z - 1, 0) * row + x].y
 			var hu := verts[mini(z + 1, resolution) * row + x].y
 			var normal := Vector3(hl - hr, 2.0 * step, hd - hu).normalized()
-			var color := _apply_slope(_terrain_color(v.y), normal)
+			var color := _apply_slope(_terrain_color(v.y * TERRAIN_COLOR_REFERENCE / TERRAIN_HEIGHT), normal)
 			var shade := 1.0 + tint.get_noise_2d(v.x, v.z) * 0.06
 			colors.append(Color(color.r * shade, color.g * shade, color.b * shade))
 

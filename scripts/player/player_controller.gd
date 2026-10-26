@@ -1,13 +1,13 @@
 extends CharacterBody3D
 
-## Контроллер игрока. Управляет камерой (мышь, геймпад, свайп), мешем тела,
-## приседанием, состоянием (FSM), здоровьем (HealthComponent) и оружием (WeaponManager).
-## Референсы: Head/Camera3D, HealthComponent, StateMachine, WeaponManager — дочерние ноды.
+## Контроллер игрока. Камера сверху (IsoCamera), направление прицеливания
+## (мышь — курсор, геймпад и тач — правый стик), меш тела, присед, видимость в тумане
+## войны, состояние (FSM), здоровье (HealthComponent) и оружие (WeaponManager).
 ## Движение читают стейты (PlayerState) через Input-действия — у ПК, геймпада и
 ## мобильного UI один и тот же путь ввода.
 
 @onready var head: Node3D = $Head
-@onready var camera: Camera3D = $Head/Camera3D
+@onready var camera: IsoCamera = $IsoCamera
 @onready var collision_shape: CollisionShape3D = $CollisionShape3D
 @onready var state_machine: StateMachine = $StateMachine
 @onready var weapon_manager: WeaponManager = $WeaponManager
@@ -26,21 +26,36 @@ var input_blocked: bool = false
 ## HUD и экран смерти есть только у локального игрока.
 var weapon_hud: CanvasLayer
 var death_screen: DeathScreen
-## Камера при смерти опускается к земле и заваливается набок — видно, что упал,
-## а не что игра зависла.
-const DEATH_HEAD_Y := 0.35
-const DEATH_ROLL := 0.6
-const DEATH_CAMERA_SPEED := 4.0
 
-# Отдача камеры
-var _recoil_x: float = 0.0
-var _recoil_recovery := 8.0
-
-# Прицеливание
+# Прицеливание: в прицеле (ADS) камера уходит дальше в сторону взгляда,
+# а разброс сужается (Rifle.get_spread_angle) — зума нет, как у Foxhole.
 var is_aiming: bool = false
-const DEFAULT_FOV := 75.0
-const AIM_FOV := 30.0
-const AIM_FOV_SPEED := 12.0
+## Точка, куда целится игрок (мир): на высоте выстрела над землёй под прицелом.
+var aim_point: Vector3 = Vector3.ZERO
+var _aim_direction := Vector3.FORWARD
+var _aim_distance: float = STICK_AIM_DISTANCE
+## Последним прицеливались мышью (иначе — стиком). Переключается тем, чем пошевелили.
+var _mouse_aim: bool = true
+## Высота выстрела над ногами: от груди, а не от глаз — пуля летит из оружия.
+const SHOT_HEIGHT := 1.25
+## Стиком (геймпад, тач) целимся на фиксированную дальность; в прицеле — дальше.
+## Точка прицела должна оставаться на экране: по вертикали камера сверху видит
+## примерно ±9 м от центра, и при 16 м прицел стиком «вверх» уходил за край.
+const STICK_AIM_DISTANCE := 11.0
+const STICK_AIM_DISTANCE_ADS := 20.0
+const STICK_AIM_DEADZONE := 0.2
+## Курсор ближе этого к игроку не меняет направление: иначе персонаж крутится на месте.
+const MIN_MOUSE_AIM_DISTANCE := 1.0
+
+## Туман войны: хост решил, что этого (удалённого) игрока нам не видно
+## (VisibilityManager). Не рисуется и не ловит пули — иначе можно стрелять по призраку
+## в последней известной позиции.
+var fog_hidden: bool = false:
+	set(value):
+		if fog_hidden == value:
+			return
+		fog_hidden = value
+		_update_presence()
 
 # Рост: стоя / присев. Капсула, голова и меш меняются вместе,
 # чтобы хитбокс совпадал с тем, что видят другие игроки.
@@ -69,20 +84,30 @@ func _ready() -> void:
 	health_component.life_state_changed.connect(_on_life_state_changed)
 
 	if is_multiplayer_authority():
+		camera.target = self
 		camera.current = true
-		if not GameSettings.is_touch_device():
-			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
-		# Своё тело не рисуем (камера внутри головы), но тень от него оставляем.
-		body_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY
+		_mouse_aim = not GameSettings.is_touch_device()
+		if _mouse_aim:
+			# Курсор прячем и держим в окне: вместо него рисуется прицел HUD.
+			Input.mouse_mode = Input.MOUSE_MODE_CONFINED_HIDDEN
 		_setup_weapon_hud()
 		death_screen = DeathScreen.new()
 		death_screen.name = "DeathScreen"
 		add_child(death_screen)
 
+		# Туман войны: свою позицию шлём только тем, кого назовёт хост
+		# (VisibilityManager), и всегда — самому хосту.
+		var sync: MultiplayerSynchronizer = $MultiplayerSynchronizer
+		sync.public_visibility = false
+		sync.set_visibility_for(1, true)
+
 		# Подключаем смерть → StateMachine
 		health_component.died.connect(_on_died)
 	else:
 		camera.current = false
+		camera.set_process(false)
+		# Чужих игроков не видно, пока хост не скажет обратное (туман войны).
+		fog_hidden = true
 	_apply_body_height()
 	_on_life_state_changed(health_component.is_alive)
 
@@ -119,11 +144,13 @@ func face_map_center() -> void:
 	var to_center := MAP_CENTER - global_position
 	to_center.y = 0.0
 	if to_center.length_squared() > 0.01:
-		rotation.y = atan2(-to_center.x, -to_center.z)
-	head.rotation.x = 0.0
+		_aim_direction = to_center.normalized()
+		rotation.y = atan2(-_aim_direction.x, -_aim_direction.z)
+	_aim_distance = STICK_AIM_DISTANCE
+	aim_point = _compute_aim_point()
 	head.position.y = get_head_height()
-	camera.rotation.z = 0.0
-	_recoil_x = 0.0
+	if is_node_ready() and camera.current:
+		camera.snap()
 
 
 ## Можно ли сейчас управлять персонажем (жив и не открыто меню).
@@ -131,7 +158,7 @@ func can_control() -> bool:
 	return health_component.is_alive and not input_blocked
 
 
-## Высота головы (камеры) для текущей позы.
+## Высота головы для текущей позы (на ней висит оружие).
 func get_head_height() -> float:
 	return CROUCH_HEAD_Y if is_crouching else STAND_HEAD_Y
 
@@ -141,27 +168,14 @@ func get_body_height() -> float:
 	return CROUCH_HEIGHT if is_crouching else STAND_HEIGHT
 
 
-func apply_recoil(amount: float) -> void:
-	var previous_pitch := head.rotation.x
-	head.rotation.x = clampf(previous_pitch + amount, -PI / 2, PI / 2)
-	_recoil_x += head.rotation.x - previous_pitch
+## Откуда летит выстрел (мир).
+func get_shot_origin() -> Vector3:
+	return global_position + Vector3.UP * (SHOT_HEIGHT * get_body_height() / STAND_HEIGHT)
 
 
-## Поворот камеры в радианах. Чувствительность масштабируется по FOV,
-## чтобы в прицеле движение на экране ощущалось так же, как от бедра.
-func look(delta_radians: Vector2) -> void:
-	if not is_multiplayer_authority() or not can_control():
-		return
-	var fov_scale := tan(deg_to_rad(camera.fov) * 0.5) / tan(deg_to_rad(DEFAULT_FOV) * 0.5)
-	var pitch_sign := -1.0 if GameSettings.invert_y else 1.0
-	rotate_y(-delta_radians.x * fov_scale)
-	head.rotate_x(-delta_radians.y * fov_scale * pitch_sign)
-	head.rotation.x = clamp(head.rotation.x, -PI / 2, PI / 2)
-
-
-## Свайп по экрану (пиксели) от MobileUI.
-func apply_touch_look(delta_pixels: Vector2) -> void:
-	look(delta_pixels * GameSettings.touch_sensitivity)
+## Горизонтальное направление прицеливания (единичное).
+func get_aim_direction() -> Vector3:
+	return _aim_direction
 
 
 func _physics_process(delta: float) -> void:
@@ -174,15 +188,13 @@ func _physics_process(delta: float) -> void:
 		move_and_slide()
 
 
-# Мышь обрабатываем в _input, а не в _unhandled_input: элементы HUD под
-# захваченным курсором (он всегда в центре экрана) не должны съедать обзор.
 func _input(event: InputEvent) -> void:
 	if not is_multiplayer_authority():
 		return
-	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED \
-			and event.device != InputEvent.DEVICE_ID_EMULATION:
-		# screen_relative не зависит от растяжения окна (stretch).
-		look(event.screen_relative * GameSettings.mouse_sensitivity)
+	# Пошевелили мышью — снова целимся курсором (после геймпада).
+	if event is InputEventMouseMotion and event.device != InputEvent.DEVICE_ID_EMULATION \
+			and not GameSettings.is_touch_device():
+		_mouse_aim = true
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -203,38 +215,50 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _process(delta: float) -> void:
-	# Голова плавно опускается при приседании — у всех пиров, чтобы оружие
-	# удалённого игрока было на правильной высоте.
+	# Голова (и оружие на ней) плавно опускается при приседании — у всех пиров.
+	head.position.y = lerpf(head.position.y, get_head_height(), 1.0 - exp(-CROUCH_TRANSITION_SPEED * delta))
 	if not is_multiplayer_authority():
-		head.position.y = lerpf(head.position.y, get_head_height(), 1.0 - exp(-CROUCH_TRANSITION_SPEED * delta))
 		return
-
-	if health_component.is_alive:
-		head.position.y = lerpf(head.position.y, get_head_height(), 1.0 - exp(-CROUCH_TRANSITION_SPEED * delta))
-	else:
-		var weight := 1.0 - exp(-DEATH_CAMERA_SPEED * delta)
-		head.position.y = lerpf(head.position.y, DEATH_HEAD_Y, weight)
-		camera.rotation.z = lerpf(camera.rotation.z, DEATH_ROLL, weight)
-
-	# Геймпад: правый стик
-	var stick := Input.get_vector("look_left", "look_right", "look_up", "look_down")
-	if stick != Vector2.ZERO:
-		look(stick * GameSettings.gamepad_look_speed * delta)
-
 	_update_aim()
+	if can_control():
+		_update_aim_direction()
+		rotation.y = atan2(-_aim_direction.x, -_aim_direction.z)
+	aim_point = _compute_aim_point()
 
-	# Восстановление отдачи камеры
-	if _recoil_x != 0.0:
-		var step := _recoil_x * (1.0 - exp(-_recoil_recovery * delta))
-		head.rotation.x -= step
-		head.rotation.x = clamp(head.rotation.x, -PI / 2, PI / 2)
-		_recoil_x -= step
-		if abs(_recoil_x) < 0.0001:
-			_recoil_x = 0.0
 
-	# Плавная смена FOV при прицеливании
-	var target_fov := AIM_FOV if is_aiming else DEFAULT_FOV
-	camera.fov = lerpf(camera.fov, target_fov, 1.0 - exp(-AIM_FOV_SPEED * delta))
+## Направление прицеливания: правый стик (геймпад; на таче его нажимает MobileUI)
+## или курсор мыши. Камера не вращается, поэтому стик задаёт направление в мире
+## напрямую: вверх по экрану — это −Z.
+func _update_aim_direction() -> void:
+	var stick := Input.get_vector("look_left", "look_right", "look_up", "look_down")
+	if stick.length() > STICK_AIM_DEADZONE:
+		_mouse_aim = false
+		_aim_direction = Vector3(stick.x, 0.0, stick.y).normalized()
+		_aim_distance = STICK_AIM_DISTANCE_ADS if is_aiming else STICK_AIM_DISTANCE
+		return
+	if not _mouse_aim:
+		_aim_distance = STICK_AIM_DISTANCE_ADS if is_aiming else STICK_AIM_DISTANCE
+		return
+	var cursor := get_viewport().get_mouse_position()
+	var on_plane := camera.screen_to_plane(cursor, get_shot_origin().y)
+	var to_cursor := (on_plane - global_position) * Vector3(1, 0, 1)
+	if to_cursor.length() > MIN_MOUSE_AIM_DISTANCE:
+		_aim_direction = to_cursor.normalized()
+		_aim_distance = to_cursor.length()
+
+
+func _compute_aim_point() -> Vector3:
+	var point := global_position + _aim_direction * _aim_distance
+	point.y = _ground_height_at(point) + SHOT_HEIGHT
+	return point
+
+
+# Высота земли без физики (та же формула, что у меша); вне игровой сцены — свой уровень.
+func _ground_height_at(point: Vector3) -> float:
+	var scene := get_tree().current_scene
+	if scene and scene.has_method("ground_height_at"):
+		return scene.ground_height_at(point.x, point.z)
+	return global_position.y
 
 
 func _update_aim() -> void:
@@ -303,13 +327,20 @@ func _apply_body_height() -> void:
 	body_mesh.scale.y = height / STAND_HEIGHT
 
 
+# Виден и ловит пули только живой и не скрытый туманом войны.
+func _update_presence() -> void:
+	if not is_node_ready():
+		return
+	var present := health_component.is_alive and not fog_hidden
+	visible = present
+	collision_shape.set_deferred("disabled", not present)
+
+
 func _on_life_state_changed(alive: bool) -> void:
-	visible = alive
-	collision_shape.set_deferred("disabled", not alive)
+	_update_presence()
 	if not alive:
 		velocity = Vector3.ZERO
 		is_aiming = false
-		_recoil_x = 0.0
 		_crouch_toggled = false
 		if is_multiplayer_authority():
 			is_crouching = false

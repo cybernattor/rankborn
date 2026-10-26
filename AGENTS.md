@@ -2,7 +2,7 @@
 
 ## What this is
 
-Godot 4.7 multiplayer shooter/strategy game. The current build is first-person, but the camera is decided: isometric top-down like Foxhole (roadmap phase 1.5 replaces the first-person code — don't invest in first-person-only features). GDScript only. No C#, no build system outside Godot.
+Godot 4.7 multiplayer shooter/strategy game with a top-down camera like Foxhole (fixed angle, twin-stick aiming, fog of war decided by the host). GDScript only. No C#, no build system outside Godot.
 
 ## Running the project
 
@@ -36,8 +36,10 @@ LAN discovery is broadcast-based (port 7001). Instances on the same machine disc
 - `scenes/weapons/rifle.tscn` → First weapon
 
 **Key scripts**:
-- `scripts/player/player_controller.gd` → Look (mouse/gamepad/swipe), aiming, recoil, crouch, input blocking, death; movement lives in `scripts/player/states/` (`PlayerState` base)
-- `scripts/world/game_scene.gd` → Player spawning, terrain generation, swipe/pause wiring, host-left handling
+- `scripts/player/player_controller.gd` → Aim direction and `aim_point` (mouse cursor or right stick), ADS, crouch, fog-of-war presence, input blocking, death; movement lives in `scripts/player/states/` (`PlayerState` base)
+- `scripts/player/iso_camera.gd` → `IsoCamera`: fixed-angle top-down camera (top_level), follows the player and looks ahead towards the aim point (further in ADS)
+- `scripts/world/visibility_manager.gd` → Fog of war: host computes who sees whom, peers hide others and limit their own sync
+- `scripts/world/game_scene.gd` → Player spawning, terrain and covers, `ground_height_at()`, pause wiring, host-left handling
 - `scripts/mesh_utils.gd` → Procedural mesh generation (humanoid, terrain, boxes)
 
 ## Networking conventions
@@ -54,13 +56,13 @@ LAN discovery is broadcast-based (port 7001). Instances on the same machine disc
 - Type hints on function signatures and `const`/`var` declarations (GDScript style)
 - Physics engine: **Jolt Physics** (not Godot's default)
 - Renderer: D3D12 on Windows (`rendering/rendering_device/driver.windows="d3d12"`)
-- Procedural low-poly terrain via `MeshUtils.make_terrain()` with `FastNoiseLite` (seed 42): 60×60 grid, per-vertex colors, flat-shaded faces (`smooth` parameter exists but is off)
+- Procedural low-poly terrain via `MeshUtils.make_terrain()` with `FastNoiseLite` (seed 42): 60×60 grid, per-vertex colors, flat-shaded faces (`smooth` parameter exists but is off). Hill amplitude `TERRAIN_HEIGHT = 4` m — gentle on purpose: with a top-down camera steep slopes make covers useless (whoever stands uphill sees over a wall)
 
 ## Mobile support
 
-All input goes through Input actions (`move_*`, `shoot`, `aim`, `jump`, `crouch`, `sprint`, `reload`, `pause`, `look_*`). `MobileUI` (`scripts/ui/mobile_ui.gd`) presses the same actions via `Input.action_press`, so states read one input path for keyboard, gamepad and touch. Only the camera swipe (`look_drag` → `player.apply_touch_look`) and the pause button go through signals.
+All input goes through Input actions (`move_*`, `shoot`, `aim`, `jump`, `crouch`, `sprint`, `reload`, `pause`, `look_*`). `MobileUI` (`scripts/ui/mobile_ui.gd`) presses the same actions via `Input.action_press`, so states read one input path for keyboard, gamepad and touch. Only the pause button goes through a signal.
 
-- Layout: floating stick in the bottom-left half (full forward = sprint), big FIRE in the bottom-right corner with DUCK/R/AIM/JUMP on an arc around it (`ARC_BUTTONS`), swipe anywhere free to look, right FIRE also looks while dragged, left FIRE duplicate, AIM/DUCK are toggles on touch. Keep the middle of the right half free: a swipe that starts on a button presses it instead of looking.
+- Layout (twin-stick): floating move stick in the bottom-left (full deflection = sprint), floating aim stick in the bottom-right that presses `look_*` like a gamepad right stick and also `shoot` past `FIRE_THRESHOLD`, a row DUCK/R/AIM/JUMP above the aim stick zone, FIRE on the left (shoot without turning), AIM/DUCK are toggles on touch. Buttons must stay off the stick zones: a touch that starts on a button presses it instead of steering.
 - `MobileUI` and `PauseMenu` live in the `UILayer` CanvasLayer (layer 10), above the weapon HUD: otherwise the scope overlay hid the buttons while they stayed tappable.
 - `MobileUI` is active when `GameSettings.is_touch_device()` (mobile/web-mobile features, or `force_touch` for testing on PC).
 - `input_devices/pointing/emulate_mouse_from_touch=true`: without it LineEdit and sliders ignore touches on Android (buttons work natively, which hid the bug). Then every touch is also a left click, so on touch devices `GameSettings` removes mouse-button events from game actions (`_apply_touch_input_map`); shooting/aiming there come only from `MobileUI`. Mouse is emulated from one finger only — the first one down when no other touch is active.
@@ -72,16 +74,19 @@ All input goes through Input actions (`move_*`, `shoot`, `aim`, `jump`, `crouch`
 
 - Player mesh is built procedurally in `_build_lowpoly_body()` — no external 3D models for players
 - Spawn slots are assigned by the host (`players[id].spawn_index`, first free marker). Markers give only x/z: spawn height comes from `MeshUtils.terrain_height_at()` (same formula as the terrain mesh, no physics query — new collision is not queryable until the next physics step). Players spawn and respawn on the ground, facing the map centre
-- Local player body is rendered shadows-only (`cast_shadow = SHADOWS_ONLY`), fully visible for remote players
+- Camera: `IsoCamera` is a top_level child of the player, current only for the authority; it never rotates (screen up = −Z), so movement is in world axes, not relative to the character. `PITCH_DEG`/`DISTANCE`/`CAMERA_FOV` are prototype values
+- Aiming: `aim_point` is at `SHOT_HEIGHT` above the ground under the cursor or at `STICK_AIM_DISTANCE` along the stick; the shot ray goes from `get_shot_origin()` (chest, lower when crouched) to `aim_point` with the spread cone. Mouse wins after any mouse motion, the stick wins after any deflection. Sprint only within 60° of the aim direction
+- Fog of war: remote players start `fog_hidden`; the host's `VisibilityManager` (range `VIEW_RANGE` + line of sight on layer 1 — terrain and covers) sends each peer its visible list. A hidden player is not drawn and has no collision (no shooting at a stale ghost); each authority sends its own sync only to peers that see it and always to the host (`public_visibility = false`). The host itself sees everyone — a P2P limit until a dedicated server
+- Covers (`game_scene.COVERS`) are StaticBody3D on layer 1, built at runtime; their height counts from the highest ground corner, the box extends down below the lowest one
 - `data/` and `resources/` do not exist yet — SQLite persistence is not implemented
 - The `addons/godot_mcp` plugin is enabled (Godot MCP integration for AI tools)
 - There is no CI, linting, or typecheck pipeline. Headless check: `godot --headless --path . --script tests/spatial_check.gd` (network: run two processes with `-- host` and `-- client`)
 - Input check needs a real display (GUI gets no events in `--headless`): `xvfb-run -a godot --path . --rendering-driver opengl3 --script tests/input_check.gd`
-- Mouse look lives in `_input`, not `_unhandled_input`: with a captured cursor it sits at screen centre, and any HUD control there would swallow motion. HUD controls must stay `mouse_filter = IGNORE`
+- In a match the PC cursor is `MOUSE_MODE_CONFINED_HIDDEN` (the HUD crosshair is drawn at the aim point instead); the pause menu shows it. HUD controls must stay `mouse_filter = IGNORE`
 - `NetworkManager.server_disconnected` fires on the client when the host leaves: the menu goes back to browsing, a running match returns to the main menu
 - Nicknames: `GameSettings.player_name` (saved), host stores it in `players[id].name`; clients send theirs via `_register_name` RPC right after connecting. Always pass names through `NetworkManager.sanitize_name`
 - LAN announces carry a per-session `host_id`; the browser keys lobbies by it so one host reachable via LAN and loopback shows once
-- Death (local player only): `DeathScreen` (`scripts/ui/death_screen.gd`, CanvasLayer 5 — above the weapon HUD, below `UILayer`) shows the killer's nick and the respawn countdown; the weapon HUD is hidden; the camera drops to `DEATH_HEAD_Y` and rolls in `_process`, `face_map_center()` resets it on respawn
+- Death (local player only): `DeathScreen` (`scripts/ui/death_screen.gd`, CanvasLayer 5 — above the weapon HUD, below `UILayer`) shows the killer's nick and the respawn countdown; the weapon HUD is hidden
 - The lobby list shows nicknames with «хост»/«вы» tags, never peer ids (host is always 1, clients get random ENet ids)
 - Pause never sets `get_tree().paused` (network game keeps running); the menu sets `player.input_blocked`
 - Player collision shape is duplicated per instance in `_ready` — crouch changes its height
@@ -96,6 +101,6 @@ The meta-game (front line, logistics, trenches, player-driven leadership via ran
 
 - Architecture doc (actual code structure, network flow): `docs/architecture.md`
 - Shooting parameters and ideas: `docs/shooting.md`
-- Design decisions (Foxhole, crossplay fairness, leadership, era/factions/logistics floor; camera — decided: isometric top-down like Foxhole, fixed angle, twin-stick aiming, fog of war decided by the host; prototype criteria in section 3; scale assumption up to 64 players per sector): `docs/design.md`
+- Design decisions (Foxhole, crossplay fairness, leadership, era/factions/logistics floor; camera — top-down like Foxhole, prototype criteria in section 3; scale assumption up to 64 players per sector): `docs/design.md`
 - Fix plan by phase, with acceptance criteria: `docs/roadmap.md`
 - Project description: `README.md` (Russian)

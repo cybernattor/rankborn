@@ -32,10 +32,21 @@ func _run() -> void:
 	await physics_frame
 	var player: CharacterBody3D = world.get_node("Players/1")
 	var remote: CharacterBody3D = world.get_node("Players/7")
+	# В headless курсор стоит в углу окна — целимся «стиком», чтобы направление задавал тест.
+	player._mouse_aim = false
 	_check(player.camera.current and not remote.camera.current)
-	_check(player.body_mesh.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY and remote.body_mesh.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_ON)
+	# Камера сверху: своё тело видно целиком, камера над игроком и смотрит вниз.
+	_check(player.body_mesh.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_ON, "Своё тело не рисуется")
+	_check(player.camera.global_position.y > player.global_position.y + 10.0 and player.camera.global_basis.z.y > 0.5, "Камера не сверху")
+	_check(is_zero_approx(player.camera.global_rotation.y), "Камера вращается вместе с игроком")
+	# Ждём, пока камера доедет до игрока (следует плавно).
+	for i in 60:
+		await process_frame
 	var hud: CanvasLayer = player.get_node("WeaponHUD")
-	_check(hud.crosshair.global_position.is_equal_approx(root.get_visible_rect().size * 0.5), "Прицел смещён относительно центра камеры")
+	var aim_on_screen: Vector2 = player.camera.unproject_position(player.aim_point)
+	_check(hud.crosshair.position.distance_to(aim_on_screen) < 1.0, "Прицел HUD не в точке прицеливания")
+	_check_covers(world)
+	await _check_fog(world, player, remote)
 	for spawn: Marker3D in world.get_node("SpawnPoints").get_children():
 		var query := PhysicsRayQueryParameters3D.create(spawn.global_position, spawn.global_position - Vector3.UP * 40.0, 1)
 		var ground: Dictionary = world.get_world_3d().direct_space_state.intersect_ray(query)
@@ -43,8 +54,8 @@ func _run() -> void:
 	_check_spawn_on_ground(world, player)
 	_check_graphics(world)
 	_check(player.get_node("WeaponHUD") != null and not remote.has_node("WeaponHUD"))
-	_check(player.get_node("Head/Camera3D/WeaponPivot/Rifle").get_multiplayer_authority() == 1)
-	_check(remote.get_node("Head/Camera3D/WeaponPivot/Rifle").get_multiplayer_authority() == 7)
+	_check(player.get_node("Head/WeaponPivot/Rifle").get_multiplayer_authority() == 1)
+	_check(remote.get_node("Head/WeaponPivot/Rifle").get_multiplayer_authority() == 7)
 	_check(player.spawn_position.distance_to(remote.spawn_position) > 1.0)
 	var marker: Marker3D = world.get_node("SpawnPoints/Spawn2")
 	marker.position.x += 1.0
@@ -58,7 +69,7 @@ func _run() -> void:
 	_check((world.get_node("KillZone").collision_mask & player.collision_layer) != 0)
 	player.state_machine.set_physics_process(false)
 	player.set_process(false)
-	var rifle: Node3D = player.get_node("Head/Camera3D/WeaponPivot/Rifle")
+	var rifle: Node3D = player.get_node("Head/WeaponPivot/Rifle")
 	rifle.set_process(false)
 	if "render" in args:
 		remote.state_machine.set_physics_process(false)
@@ -77,19 +88,17 @@ func _run() -> void:
 	_check(player.death_screen.is_shown() and "Remote" in player.death_screen.get_killer_text(), "Нет экрана смерти с ником убийцы")
 	_check(not player.weapon_hud.visible, "HUD оружия виден после смерти")
 	await create_timer(1.0).timeout
-	_check(player.head.position.y < player.STAND_HEAD_Y * 0.5 and player.camera.rotation.z > 0.3, "Камера не падает при смерти")
 	_check(world.game_mode.get_score(1).deaths == 1)
-	# Перед смертью смотрим вбок и вниз — после респавна взгляд должен вернуться к центру карты.
+	# Перед смертью смотрим вбок — после респавна взгляд должен вернуться к центру карты.
 	player.rotation.y = PI * 0.5
-	player.head.rotation.x = -0.8
+	player._aim_direction = Vector3.RIGHT
 	await create_timer(1.2).timeout
 	_check(player.visible and not player.get_node("CollisionShape3D").disabled)
 	_check(not player.death_screen.is_shown() and player.weapon_hud.visible, "Экран смерти не скрылся после респавна")
-	_check(is_zero_approx(player.camera.rotation.z) and is_equal_approx(player.head.position.y, player.STAND_HEAD_Y), "Камера не вернулась после респавна")
 	var to_center: Vector3 = (player.MAP_CENTER - player.global_position) * Vector3(1, 0, 1)
 	_check((-player.global_basis.z).dot(to_center.normalized()) > 0.99, "После респавна игрок смотрит не к центру карты")
-	_check(is_zero_approx(player.head.rotation.x), "После респавна сохраняется наклон головы")
-	_check(player.body_mesh.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY and player.health_component.is_alive)
+	_check(player.get_aim_direction().dot(to_center.normalized()) > 0.99, "После респавна прицел не к центру карты")
+	_check(player.body_mesh.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_ON and player.health_component.is_alive)
 	player.global_position = Vector3(0, -20, 0)
 	await create_timer(0.15).timeout
 	_check(not player.health_component.is_alive, "Зона смерти не обнаруживает упавшего игрока")
@@ -149,19 +158,26 @@ func _check_shots(world: Node3D, player: CharacterBody3D, rifle: Node3D) -> void
 	shape.shape = box
 	target.add_child(shape)
 	world.add_child(target)
-	for yaw in [0.0, PI / 2.0, PI]:
-		player.rotation.y = yaw
-		player.head.rotation.x = 0.0
-		target.global_position = player.camera.global_position - player.camera.global_basis.z * 10.0
+	# Выстрел летит от оружия в сторону точки прицеливания и укладывается в конус разброса.
+	for dir: Vector3 in [Vector3.FORWARD, Vector3.RIGHT, Vector3(-1, 0, 1).normalized()]:
+		player._aim_direction = dir
+		var origin: Vector3 = player.get_shot_origin()
+		player.aim_point = origin + dir * 10.0
+		target.global_position = origin + dir * 10.0
+		target.global_basis = Basis.looking_at(dir)
 		await physics_frame
 		await physics_frame
 		rifle._apply_bullet_spread()
-		_check(rifle.raycast.global_position.is_equal_approx(player.camera.global_position))
-		_check(rifle.raycast.get_collider() == target, "Выстрел должен следовать камере")
-		var projected: Vector2 = player.camera.unproject_position(rifle.raycast.get_collision_point())
-		var center := root.get_visible_rect().size * 0.5
-		var radius: float = tan(rifle.get_spread_angle()) * center.y / tan(deg_to_rad(player.camera.fov) * 0.5)
-		_check(absf(projected.x - center.x) <= radius + 1.0 and absf(projected.y - center.y) <= radius + 1.0)
+		_check(rifle.raycast.global_position.is_equal_approx(origin), "Выстрел вылетает не из оружия")
+		_check(rifle.raycast.get_collider() == target, "Выстрел не летит в сторону прицела")
+		var shot: Vector3 = rifle.raycast.get_collision_point() - origin
+		_check(shot.angle_to(dir) <= rifle.get_spread_angle() * 1.06 + 0.001, "Выстрел вне конуса разброса")
+	# Прицеливание сужает конус.
+	player.is_aiming = false
+	var hip: float = rifle.get_spread_angle()
+	player.is_aiming = true
+	_check(rifle.get_spread_angle() < hip * 0.5, "Прицеливание не сужает разброс")
+	player.is_aiming = false
 	var tip: Vector3 = rifle.rifle_mesh.position + Vector3(0, 0, rifle.rifle_mesh.mesh.get_aabb().position.z)
 	_check(tip.is_equal_approx(rifle.muzzle_flash.position))
 	var outline: MeshInstance3D = rifle.rifle_mesh.get_child(0)
@@ -220,11 +236,66 @@ func _check_spawn_on_ground(world: Node3D, player: CharacterBody3D) -> void:
 	for p in points:
 		var query := PhysicsRayQueryParameters3D.create(Vector3(p.x, 40, p.y), Vector3(p.x, -40, p.y), 1)
 		var hit: Dictionary = space.intersect_ray(query)
+		if not hit.is_empty() and hit.collider != world.get_node("GroundBody"):
+			continue  # попали в укрытие
 		var formula := MeshUtils.terrain_height_at(world.TERRAIN_SIZE, world.TERRAIN_RESOLUTION, world.TERRAIN_SEED, p.x, p.y)
 		_check(not hit.is_empty() and absf(hit.position.y - formula) < 0.01, "Высота земли по формуле не совпадает с коллизией")
 	var below := PhysicsRayQueryParameters3D.create(player.spawn_position + Vector3.UP, player.spawn_position - Vector3.UP * 5, 1)
 	var ground: Dictionary = space.intersect_ray(below)
 	_check(not ground.is_empty() and player.spawn_position.y - ground.position.y < 0.2, "Игрок появляется в воздухе")
+
+
+## Укрытия стоят на земле (не висят над склоном) и останавливают выстрелы и взгляд.
+func _check_covers(world: Node3D) -> void:
+	var covers: Array[Node] = world.get_node("Covers").get_children()
+	_check(covers.size() >= 8, "Мало укрытий")
+	for cover: StaticBody3D in covers:
+		_check(cover.collision_layer == 1, "Укрытие не на слое мира")
+		var box: BoxShape3D = cover.get_child(0).shape
+		var bottom: float = cover.global_position.y - box.size.y * 0.5
+		for corner in [Vector3(-1, 0, -1), Vector3(1, 0, -1), Vector3(-1, 0, 1), Vector3(1, 0, 1)]:
+			var p: Vector3 = cover.global_transform * (corner * box.size * 0.5 * Vector3(1, 0, 1))
+			_check(world.ground_height_at(p.x, p.z) >= bottom, "Укрытие висит над землёй")
+
+
+## Туман войны: хост считает видимость; спрятанный за стеной или далёкий игрок
+## не рисуется и не ловит пули.
+func _check_fog(world: Node3D, player: CharacterBody3D, remote: CharacterBody3D) -> void:
+	var manager: Node = world.get_node("VisibilityManager")
+	var place := func(body: Node3D, x: float, z: float) -> void:
+		body.global_position = Vector3(x, world.ground_height_at(x, z) + 0.05, z)
+	# Стена 6 × 2.2 м в центре карты вдоль оси X.
+	place.call(player, 0.0, -4.0)
+	place.call(remote, 0.0, 4.0)
+	await physics_frame
+	_check(not manager.can_see(player, remote), "Стена не закрывает видимость")
+	manager.apply_visibility(manager.compute_visibility()[1])
+	_check(remote.fog_hidden and not remote.visible, "Спрятанный за стеной игрок виден")
+	await physics_frame
+	_check(remote.collision_shape.disabled, "Спрятанный игрок ловит пули")
+	place.call(remote, 10.0, 4.0)
+	await physics_frame
+	_check(manager.can_see(player, remote), "Игрок сбоку от стены не виден")
+	manager.apply_visibility(manager.compute_visibility()[1])
+	_check(not remote.fog_hidden and remote.visible, "Видимый игрок спрятан")
+	place.call(remote, 0.0, -4.0 - manager.VIEW_RANGE - 2.0)
+	await physics_frame
+	_check(not manager.can_see(player, remote), "Видно дальше дальности обзора")
+	# Стоящего видно поверх мешков с песком, присевшего — нет.
+	place.call(player, -16.0, 11.0)
+	place.call(remote, -16.0, 17.0)
+	await physics_frame
+	_check(manager.can_see(player, remote), "Стоящего не видно поверх мешков")
+	player.is_crouching = true
+	remote.is_crouching = true
+	await physics_frame
+	_check(not manager.can_see(player, remote), "Присевших видно сквозь мешки")
+	player.is_crouching = false
+	remote.is_crouching = false
+	player.global_position = player.spawn_position
+	remote.global_position = remote.spawn_position
+	await physics_frame
+	await physics_frame
 
 
 ## Пресеты графики применяются к окну и солнцу и переключаются на лету.
@@ -268,15 +339,51 @@ func _check_graphics(world: Node3D) -> void:
 func _check_hud(player: CharacterBody3D) -> void:
 	var hud: CanvasLayer = player.get_node("WeaponHUD")
 	# Просадка FPS (кадр 0.2 с) с прицеливанием туда-обратно: прицел не должен улететь.
+	player.is_aiming = true
+	var ads_spread: float = hud._calculate_spread()
+	player.is_aiming = false
+	var hip_spread: float = hud._calculate_spread()
 	for i in 8:
-		player.camera.fov = player.AIM_FOV if i % 2 == 0 else player.DEFAULT_FOV
+		player.is_aiming = i % 2 == 0
 		hud._update_crosshair_spread(0.2)
-	player.camera.fov = player.DEFAULT_FOV
-	_check(absf(hud._current_spread) < 100.0, "Разброс прицела расходится при низком FPS")
-	hud._set_scope_visible(true)
-	for node_name in ["ScopeCrossV", "ScopeCrossH", "ScopeCrossBottom", "ScopeCrossRight"]:
-		_check(hud.get_node("UILayer/" + node_name).visible, "Перекрестье прицела нарисовано не полностью")
-	hud._set_scope_visible(false)
+	player.is_aiming = false
+	_check(hud._current_spread >= minf(ads_spread, hip_spread) - 0.5 and hud._current_spread <= maxf(ads_spread, hip_spread) + 0.5,
+			"Разброс прицела расходится при низком FPS")
+	_check(not hud.has_node("UILayer/ScopeOverlay"), "Осталась оптика от первого лица")
+
+
+## Туман войны по сети: спрятавшийся за стеной не рисуется у другого и не шлёт ему
+## свою позицию; хосту позиции приходят всегда — он считает видимость.
+func _check_network_fog(world: Node3D, own: CharacterBody3D, remote: CharacterBody3D, mode: String) -> void:
+	await _wait_until(func(): return not remote.fog_hidden)
+	# Расходимся по разные стороны центральной стены (6 × 2.2 м вдоль оси X).
+	_place(world, own, Vector2(0.0, -4.0 if mode == "host" else 4.0))
+	await _wait_until(func(): return remote.fog_hidden)
+	await physics_frame  # коллизия отключается отложенно
+	_check(not remote.visible and remote.collision_shape.disabled, "Спрятанный за стеной игрок виден")
+	var seen_at: Vector3 = remote.global_position
+	await create_timer(0.4).timeout
+	# Оба сдвигаются вдоль стены, оставаясь за ней.
+	_place(world, own, Vector2(1.5, own.global_position.z))
+	await create_timer(1.0).timeout
+	if mode == "client":
+		_check(remote.global_position.is_equal_approx(seen_at), "Хост шлёт свою позицию тому, кто его не видит")
+	else:
+		_check(not remote.global_position.is_equal_approx(seen_at), "Хост не получает позицию скрытого игрока")
+	# Снова на открытое место — видят друг друга.
+	_place(world, own, Vector2(-4.0 if mode == "host" else 4.0, 8.0))
+	await _wait_until(func(): return not remote.fog_hidden)
+	_check(remote.visible, "Вышедший из-за стены игрок не появился")
+
+
+func _place(world: Node3D, body: CharacterBody3D, xz: Vector2) -> void:
+	body.velocity = Vector3.ZERO
+	body.global_position = Vector3(xz.x, world.ground_height_at(xz.x, xz.y) + 0.05, xz.y)
+
+
+func _wait_until(condition: Callable) -> void:
+	while not condition.call():
+		await process_frame
 
 
 func _check_lobby_network(network: Node) -> void:
@@ -310,7 +417,7 @@ func _check_network(network: Node, mode: String) -> void:
 		network.join_game("127.0.0.1", 17000)
 	while network.players.size() < 2:
 		await process_frame
-	_deadline = Time.get_ticks_msec() + 15000
+	_deadline = Time.get_ticks_msec() + 30000
 	var ids: Array = network.players.keys()
 	# Ник клиента приходит хосту отдельным RPC и рассылается всем.
 	while network.players.values().filter(func(p): return p.name == "Клиент").is_empty():
@@ -324,8 +431,14 @@ func _check_network(network: Node, mode: String) -> void:
 	var remote_id: int = ids[0] if ids[0] != own_id else ids[1]
 	var remote: CharacterBody3D = world.get_node("Players/%d" % remote_id)
 	_check(own.camera.current and not remote.camera.current)
-	_check(own.body_mesh.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY and remote.body_mesh.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_ON)
 	_check(own.spawn_position.distance_to(remote.spawn_position) > 1.0)
+	# Спавны в 40 м друг от друга — дальше дальности обзора: туман войны прячет соседа.
+	_check(remote.fog_hidden, "Игрок за пределами обзора виден")
+	# Сходимся на открытом месте южнее центральной стены — друг друга видно.
+	var spot := Vector2(-4.0 if mode == "host" else 4.0, 8.0)
+	_place(world, own, spot)
+	await _wait_until(func(): return not remote.fog_hidden)
+	_check(remote.visible, "Видимый по туману игрок не рисуется")
 	# Присед хоста виден клиенту, и капсула меняется только у присевшего.
 	if mode == "host":
 		Input.action_press("crouch")
@@ -339,6 +452,13 @@ func _check_network(network: Node, mode: String) -> void:
 		_check(is_equal_approx(own.collision_shape.shape.height, own.STAND_HEIGHT), "Присед одного игрока меняет капсулу другого")
 	if mode == "host":
 		own.health_component.take_damage(9999.0, remote_id)
+		# После респавна (на далёком спавне) возвращаемся, иначе клиент нас не увидит.
+		while own.health_component.is_alive:
+			await process_frame
+		while not own.health_component.is_alive:
+			await process_frame
+		await process_frame
+		_place(world, own, spot)
 	else:
 		while remote.health_component.is_alive:
 			await process_frame
@@ -346,7 +466,9 @@ func _check_network(network: Node, mode: String) -> void:
 		_check(not remote.visible and remote.get_node("CollisionShape3D").disabled)
 		while not remote.health_component.is_alive:
 			await process_frame
-		await process_frame
+		# Ожив на далёком спавне, он вернётся к месту встречи — тогда снова виден.
+		await _wait_until(func(): return not remote.fog_hidden)
+		await physics_frame
 		_check(remote.visible and not remote.get_node("CollisionShape3D").disabled)
 		own.health_component.take_damage(9999.0, remote_id)
 	if mode == "host":
@@ -356,14 +478,19 @@ func _check_network(network: Node, mode: String) -> void:
 		_check(not remote.visible and remote.get_node("CollisionShape3D").disabled)
 		while not remote.health_component.is_alive:
 			await process_frame
-		await process_frame
+		# Ожив на далёком спавне, он вернётся к месту встречи — тогда снова виден.
+		await _wait_until(func(): return not remote.fog_hidden)
+		await physics_frame
 		_check(remote.visible and not remote.get_node("CollisionShape3D").disabled)
 		_check(world.game_mode.get_score(1).deaths == 1)
 		_check(world.game_mode.get_score(remote_id).deaths == 1)
 	else:
 		while not own.health_component.is_alive:
 			await process_frame
+		await process_frame
+		_place(world, own, spot)
 	await create_timer(0.3).timeout
+	await _check_network_fog(world, own, remote, mode)
 	if _failed:
 		quit(1)
 		return

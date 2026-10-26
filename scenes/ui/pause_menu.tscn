@@ -41,37 +41,6 @@ layout_mode = 2
 text = "ПАУЗА"
 horizontal_alignment = 1
 
-[node name="MouseSensLabel" type="Label" parent="VBoxContainer"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Чувствительность мыши"
-
-[node name="MouseSensSlider" type="HSlider" parent="VBoxContainer"]
-unique_name_in_owner = true
-layout_mode = 2
-min_value = 0.0005
-max_value = 0.006
-step = 0.0001
-value = 0.002
-
-[node name="TouchSensLabel" type="Label" parent="VBoxContainer"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Чувствительность свайпа"
-
-[node name="TouchSensSlider" type="HSlider" parent="VBoxContainer"]
-unique_name_in_owner = true
-layout_mode = 2
-min_value = 0.001
-max_value = 0.012
-step = 0.0002
-value = 0.004
-
-[node name="InvertYCheck" type="CheckBox" parent="VBoxContainer"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Инвертировать ось Y"
-
 [node name="AimToggleCheck" type="CheckBox" parent="VBoxContainer"]
 unique_name_in_owner = true
 layout_mode = 2
