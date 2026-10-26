@@ -49,6 +49,9 @@ func _ready() -> void:
 	_bind_local_player_ui()
 	_apply_graphics()
 	GameSettings.changed.connect(_apply_graphics)
+	var auto_quality := AutoQuality.new()
+	auto_quality.name = "AutoQuality"
+	add_child(auto_quality)
 	_fade_in_with_prewarm()
 
 

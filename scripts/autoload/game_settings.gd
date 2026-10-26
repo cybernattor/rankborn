@@ -35,8 +35,11 @@ const QUALITY_PRESETS := {
 	Quality.HIGH: {"scale": 1.0, "msaa": Viewport.MSAA_2X, "shadows": true,
 			"soft": RenderingServer.SHADOW_QUALITY_SOFT_LOW, "splits": 4, "lights": true},
 }
-## Пусто — не выбрано, берётся default_quality() (на тач-устройствах ниже).
-var graphics_quality: int = -1
+## Выбор игрока: пресет или QUALITY_AUTO (по умолчанию).
+const QUALITY_AUTO := 3
+var graphics_quality: int = QUALITY_AUTO
+## Уровень, до которого дошла автонастройка (AutoQuality); с него начинается следующий матч.
+var auto_quality_level: int = -1
 
 
 func _ready() -> void:
@@ -56,6 +59,7 @@ func load_settings() -> void:
 	crouch_toggle = cfg.get_value("controls", "crouch_toggle", crouch_toggle)
 	player_name = cfg.get_value("profile", "player_name", player_name)
 	graphics_quality = cfg.get_value("graphics", "quality", graphics_quality)
+	auto_quality_level = cfg.get_value("graphics", "auto_level", auto_quality_level)
 	changed.emit()
 
 
@@ -69,6 +73,7 @@ func save_settings() -> void:
 	cfg.set_value("controls", "crouch_toggle", crouch_toggle)
 	cfg.set_value("profile", "player_name", player_name)
 	cfg.set_value("graphics", "quality", graphics_quality)
+	cfg.set_value("graphics", "auto_level", auto_quality_level)
 	cfg.save(SETTINGS_PATH)
 	changed.emit()
 
@@ -118,11 +123,35 @@ func _apply_touch_input_map() -> void:
 		_removed_mouse_events.clear()
 
 
-## Качество, выбранное игроком, или по умолчанию для устройства.
+## Действующий пресет: выбранный игроком или текущий уровень автонастройки.
 func get_quality() -> int:
 	if graphics_quality in QUALITY_PRESETS:
 		return graphics_quality
+	if auto_quality_level in QUALITY_PRESETS:
+		return auto_quality_level
 	return default_quality()
+
+
+func is_auto_quality() -> bool:
+	return not graphics_quality in QUALITY_PRESETS
+
+
+## Выбор в меню. Повторное включение «Авто» начинает подбор заново, с уровня по умолчанию:
+## иначе один неудачный замер навсегда оставил бы низкую графику.
+func set_quality_choice(choice: int) -> void:
+	if choice == QUALITY_AUTO and not is_auto_quality():
+		auto_quality_level = default_quality()
+	graphics_quality = choice
+
+
+## Автонастройка: на ступень ниже. false — ниже некуда.
+func lower_auto_quality() -> bool:
+	var level := get_quality()
+	if level <= Quality.LOW:
+		return false
+	auto_quality_level = level - 1
+	save_settings()
+	return true
 
 
 func default_quality() -> int:

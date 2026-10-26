@@ -234,8 +234,27 @@ func _check_graphics(world: Node3D) -> void:
 	_check(sun.shadow_enabled and is_equal_approx(root.scaling_3d_scale, 1.0) \
 			and sun.directional_shadow_mode == DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS \
 			and settings.dynamic_lights_enabled(), "Высокая графика не применилась")
+	# «Авто»: медленные кадры снижают пресет на ступень, быстрые — нет.
+	var saved_auto: int = settings.auto_quality_level
+	settings.graphics_quality = settings.Quality.HIGH
+	settings.set_quality_choice(settings.QUALITY_AUTO)
+	_check(settings.is_auto_quality() and settings.get_quality() == settings.Quality.HIGH, "«Авто» на ПК начинает не с высокой")
+	# Без типа AutoQuality: скрипт теста компилируется раньше автозагрузок, а класс ссылается на GameSettings.
+	var auto_quality: Node = world.get_node("AutoQuality")
+	for i in 600:
+		auto_quality.add_frame(1.0 / 60.0)
+	_check(settings.get_quality() == settings.Quality.HIGH, "«Авто» снизило графику при 60 FPS")
+	# Снижает по ступени, с паузой на замер после каждой смены.
+	var steps: Array[int] = []
+	for i in 600:
+		auto_quality.add_frame(1.0 / 20.0)
+		if steps.is_empty() or steps.back() != settings.get_quality():
+			steps.append(settings.get_quality())
+	_check(steps == [settings.Quality.HIGH, settings.Quality.MEDIUM, settings.Quality.LOW] and not sun.shadow_enabled,
+			"«Авто» не снижает графику по ступени при 20 FPS: %s" % [steps])
 	settings.graphics_quality = saved
-	settings.changed.emit()
+	settings.auto_quality_level = saved_auto
+	settings.save_settings()
 
 
 func _check_hud(player: CharacterBody3D) -> void:

@@ -17,8 +17,10 @@ func _ready() -> void:
 	visible = false
 	resume_button.pressed.connect(_on_resume)
 	exit_button.pressed.connect(_on_exit_menu)
+	quality_option.add_item("Авто", GameSettings.QUALITY_AUTO)
 	for i in GameSettings.QUALITY_NAMES.size():
 		quality_option.add_item(GameSettings.QUALITY_NAMES[i], i)
+	GameSettings.changed.connect(_update_auto_label)
 	_load_settings_into_ui()
 	quality_option.item_selected.connect(_on_setting_changed.unbind(1))
 	mouse_sens_slider.value_changed.connect(_on_setting_changed.unbind(1))
@@ -52,7 +54,9 @@ func _load_settings_into_ui() -> void:
 	invert_y_check.set_pressed_no_signal(GameSettings.invert_y)
 	aim_toggle_check.set_pressed_no_signal(GameSettings.aim_toggle)
 	crouch_toggle_check.set_pressed_no_signal(GameSettings.crouch_toggle)
-	quality_option.select(GameSettings.get_quality())
+	var choice := GameSettings.QUALITY_AUTO if GameSettings.is_auto_quality() else GameSettings.graphics_quality
+	quality_option.select(quality_option.get_item_index(choice))
+	_update_auto_label()
 
 
 func _on_setting_changed() -> void:
@@ -61,7 +65,7 @@ func _on_setting_changed() -> void:
 	GameSettings.invert_y = invert_y_check.button_pressed
 	GameSettings.aim_toggle = aim_toggle_check.button_pressed
 	GameSettings.crouch_toggle = crouch_toggle_check.button_pressed
-	GameSettings.graphics_quality = quality_option.get_selected_id()
+	GameSettings.set_quality_choice(quality_option.get_selected_id())
 	GameSettings.save_settings()
 
 
@@ -72,3 +76,9 @@ func _on_resume() -> void:
 func _on_exit_menu() -> void:
 	NetworkManager.disconnect_game()
 	get_tree().change_scene_to_file("res://scenes/main/main_menu.tscn")
+
+
+# В пункте «Авто» видно, на каком уровне сейчас автонастройка.
+func _update_auto_label() -> void:
+	var index := quality_option.get_item_index(GameSettings.QUALITY_AUTO)
+	quality_option.set_item_text(index, "Авто (%s)" % GameSettings.QUALITY_NAMES[GameSettings.get_quality()].to_lower())
