@@ -36,8 +36,8 @@ func _run() -> void:
 	root.add_child(world)
 	current_scene = world
 	player = world.get_node("Players/1")
-	ui = world.get_node("MobileUI")
-	pause_menu = world.get_node("PauseMenu")
+	ui = world.get_node("UILayer/MobileUI")
+	pause_menu = world.get_node("UILayer/PauseMenu")
 	await _wait_landed()
 	await _check_mouse_look(settings)
 	await _check_movement()
@@ -277,12 +277,46 @@ func _check_touch() -> void:
 	await _touch(6, ui._buttons.pause.center, true)
 	_check(pause_menu.visible and not ui.visible, "Кнопка паузы не открывает меню")
 	_check(Input.get_vector("move_left", "move_right", "move_forward", "move_back") == Vector2.ZERO, "Меню не отпускает зажатые действия")
-	# Кнопки меню нажимаются касанием (эмуляция мыши выключена).
+	await _touch(5, start, false)
+	await _touch(6, ui._buttons.pause.center, false)
+	# Слайдер тянется касанием: без эмуляции мыши из касаний поля ввода и слайдеры
+	# на Android не реагировали (кнопки — да, поэтому это не сразу заметили).
+	var slider: HSlider = pause_menu.get_node("VBoxContainer/TouchSensSlider")
+	var before := slider.value
+	var rect := slider.get_global_rect()
+	var target := Vector2(rect.position.x + rect.size.x * 0.9, rect.get_center().y)
+	# Мышь эмулируется от первого пальца, коснувшегося, когда других нет.
+	await _touch(0, target, true)
+	await _touch(0, target, false)
+	_check(slider.value != before, "Слайдер в меню не реагирует на касание")
+	slider.value = before
+	# Кнопки меню нажимаются касанием.
 	var resume: Button = pause_menu.get_node("%ResumeButton")
 	var center := resume.get_global_rect().get_center()
 	await _touch(7, center, true)
 	await _touch(7, center, false)
 	_check(not pause_menu.visible and ui.visible, "Кнопки меню не нажимаются касанием")
+	_check_touch_layout(size)
+
+
+## Сенсорный UI поверх HUD (прицел закрывал кнопки, но они нажимались), кнопки
+## не перекрываются, в пределах экрана и не закрывают патроны.
+func _check_touch_layout(size: Vector2) -> void:
+	var hud: CanvasLayer = player.get_node("WeaponHUD")
+	_check((ui.get_parent() as CanvasLayer).layer > hud.layer, "Сенсорные кнопки рисуются под HUD")
+	var screen := Rect2(Vector2.ZERO, size)
+	var names: Array = ui._buttons.keys()
+	for i in names.size():
+		var a: Dictionary = ui._buttons[names[i]]
+		_check(screen.grow(-a.radius).has_point(a.center), "Кнопка %s выходит за экран" % names[i])
+		for j in range(i + 1, names.size()):
+			var b: Dictionary = ui._buttons[names[j]]
+			_check(a.center.distance_to(b.center) > a.radius + b.radius, "Кнопки %s и %s перекрываются" % [names[i], names[j]])
+	var ammo: Rect2 = hud.get_node("UILayer/BottomRight").get_global_rect()
+	for name in names:
+		var b: Dictionary = ui._buttons[name]
+		var closest: Vector2 = (b.center as Vector2).clamp(ammo.position, ammo.end)
+		_check(closest.distance_to(b.center) > b.radius, "Кнопка %s закрывает патроны" % name)
 
 
 ## Поворот вправо с момента yaw_before, с учётом перехода угла через ±PI.

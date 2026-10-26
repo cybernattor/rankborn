@@ -8,6 +8,7 @@ extends Control
 ## - левая нижняя часть экрана — плавающий джойстик (появляется под пальцем);
 ##   отклонение до края вперёд включает спринт;
 ## - свайп по любому свободному месту — обзор;
+## - справа внизу FIRE, вокруг неё дугой DUCK, R, AIM, JUMP;
 ## - FIRE справа: удержание стреляет, а перетаскивание пальца по ней крутит камеру,
 ##   поэтому можно целиться и стрелять одним пальцем;
 ## - FIRE слева — дубль для второй руки.
@@ -22,6 +23,19 @@ const SPRINT_THRESHOLD := 0.95
 const MOVE_ZONE_WIDTH := 0.4
 const MOVE_ZONE_TOP := 0.5
 const MOVE_ACTIONS := ["move_left", "move_right", "move_forward", "move_back"]
+
+## FIRE в правом нижнем углу, остальные кнопки — на дуге вокруг неё.
+const FIRE_RADIUS := 70.0
+const FIRE_MARGIN := 150.0
+const ARC_DISTANCE := 135.0
+const ARC_BUTTON_RADIUS := 42.0
+## Угол на дуге в градусах: 180 — слева от FIRE, 270 — над ней (ось y вниз).
+const ARC_BUTTONS := {
+	"crouch": {"angle": 160.0, "label": "DUCK", "action": "crouch"},
+	"reload": {"angle": 200.0, "label": "R", "action": "reload"},
+	"aim": {"angle": 240.0, "label": "AIM", "action": "aim"},
+	"jump": {"angle": 282.0, "label": "JUMP", "action": "jump"},
+}
 
 const COLOR_FILL := Color(0.1, 0.12, 0.15, 0.35)
 const COLOR_FILL_ACTIVE := Color(0.95, 0.75, 0.3, 0.45)
@@ -61,15 +75,22 @@ func _notification(what: int) -> void:
 func _layout() -> void:
 	var w := size.x
 	var h := size.y
+	# Правые кнопки — дугой вокруг FIRE под большим пальцем, как в мобильных шутерах.
+	# Раньше они были разбросаны по правой половине: свайп для обзора начинался
+	# на какой-нибудь кнопке и вместо поворота её нажимал. Середина и верх правой
+	# половины теперь свободны под обзор.
+	var fire_center := Vector2(w - FIRE_MARGIN, h - FIRE_MARGIN)
 	_buttons = {
-		"fire": {"center": Vector2(w - 130, h - 170), "radius": 64.0, "label": "FIRE", "action": "shoot", "look": true},
+		"fire": {"center": fire_center, "radius": FIRE_RADIUS, "label": "FIRE", "action": "shoot", "look": true},
 		"fire_left": {"center": Vector2(110, h * 0.36), "radius": 42.0, "label": "FIRE", "action": "shoot", "look": false},
-		"aim": {"center": Vector2(w - 120, h - 330), "radius": 44.0, "label": "AIM", "action": "aim", "look": false},
-		"reload": {"center": Vector2(w - 270, h - 250), "radius": 40.0, "label": "R", "action": "reload", "look": false},
-		"jump": {"center": Vector2(w - 270, h - 110), "radius": 46.0, "label": "JUMP", "action": "jump", "look": false},
-		"crouch": {"center": Vector2(w - 390, h - 80), "radius": 40.0, "label": "DUCK", "action": "crouch", "look": false},
 		"pause": {"center": Vector2(w - 56, 56), "radius": 32.0, "label": "II", "action": "", "look": false},
 	}
+	for name in ARC_BUTTONS:
+		var spec: Dictionary = ARC_BUTTONS[name]
+		_buttons[name] = {
+			"center": fire_center + Vector2.from_angle(deg_to_rad(spec.angle)) * ARC_DISTANCE,
+			"radius": ARC_BUTTON_RADIUS, "label": spec.label, "action": spec.action, "look": false,
+		}
 	_stick_origin = _default_stick_origin()
 	queue_redraw()
 

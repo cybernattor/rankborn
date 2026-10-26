@@ -101,8 +101,11 @@ rankborn/
 Весь ввод — Input-действия (`move_*`, `shoot`, `aim`, `jump`, `crouch`, `sprint`, `reload`,
 `pause`, `look_*`, `weapon_next/prev`). Клавиатура, геймпад и тач идут одним путём:
 `MobileUI` нажимает действия через `Input.action_press`. Наружу из `MobileUI` идут только
-свайп камеры и кнопка паузы. Эмуляция мыши из тача **выключена**
-(`input_devices/pointing/emulate_mouse_from_touch=false`): иначе любое касание стреляло.
+свайп камеры и кнопка паузы. Эмуляция мыши из тача **включена**
+(`input_devices/pointing/emulate_mouse_from_touch=true`): без неё на Android не работали
+поля ввода и слайдеры. Чтобы касание не стреляло как клик, на тач-устройствах
+`GameSettings` снимает кнопки мыши с игровых действий. Сенсорный UI и пауза — в
+`CanvasLayer` выше HUD оружия.
 Раскладки — в README, раздел «Управление».
 
 ## Миграция LAN → прод

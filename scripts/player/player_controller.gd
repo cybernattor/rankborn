@@ -170,7 +170,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	# Меню открывается и во время смерти.
 	if event.is_action_pressed("pause"):
-		var pause_menu = get_tree().current_scene.get_node_or_null("PauseMenu")
+		var pause_menu = get_tree().current_scene.get_node_or_null("UILayer/PauseMenu")
 		if pause_menu:
 			pause_menu.toggle()
 		return

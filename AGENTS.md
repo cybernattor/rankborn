@@ -60,9 +60,12 @@ LAN discovery is broadcast-based (port 7001). Instances on the same machine disc
 
 All input goes through Input actions (`move_*`, `shoot`, `aim`, `jump`, `crouch`, `sprint`, `reload`, `pause`, `look_*`). `MobileUI` (`scripts/ui/mobile_ui.gd`) presses the same actions via `Input.action_press`, so states read one input path for keyboard, gamepad and touch. Only the camera swipe (`look_drag` → `player.apply_touch_look`) and the pause button go through signals.
 
-- Layout: floating stick in the bottom-left half (full forward = sprint), swipe anywhere free to look, right FIRE also looks while dragged, left FIRE duplicate, AIM/DUCK are toggles on touch.
+- Layout: floating stick in the bottom-left half (full forward = sprint), big FIRE in the bottom-right corner with DUCK/R/AIM/JUMP on an arc around it (`ARC_BUTTONS`), swipe anywhere free to look, right FIRE also looks while dragged, left FIRE duplicate, AIM/DUCK are toggles on touch. Keep the middle of the right half free: a swipe that starts on a button presses it instead of looking.
+- `MobileUI` and `PauseMenu` live in the `UILayer` CanvasLayer (layer 10), above the weapon HUD: otherwise the scope overlay hid the buttons while they stayed tappable.
 - `MobileUI` is active when `GameSettings.is_touch_device()` (mobile/web-mobile features, or `force_touch` for testing on PC).
-- `input_devices/pointing/emulate_mouse_from_touch=false`: otherwise every touch is an emulated left click and fires the gun. GUI controls still receive touches natively.
+- `input_devices/pointing/emulate_mouse_from_touch=true`: without it LineEdit and sliders ignore touches on Android (buttons work natively, which hid the bug). Then every touch is also a left click, so on touch devices `GameSettings` removes mouse-button events from game actions (`_apply_touch_input_map`); shooting/aiming there come only from `MobileUI`. Mouse is emulated from one finger only — the first one down when no other touch is active.
+- Mobile rendering overrides in `project.godot`: `scaling_3d/scale.mobile=0.8`, soft directional shadows; sun `directional_shadow_max_distance = 50`. Debug builds show an FPS counter in the HUD.
+- Match start fades in from black while `Rifle.prewarm_effects()` draws every shot effect once (first-draw shader compile used to hitch the first shot).
 - `application/config/quit_on_go_back=false`: Android Back toggles the pause menu in a match.
 
 ## Gotchas

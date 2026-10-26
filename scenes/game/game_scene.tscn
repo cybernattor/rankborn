@@ -46,14 +46,18 @@ transform = Transform3D(0.866025, -0.383022, 0.321394, 0, 0.642788, 0.766044, -0
 light_color = Color(1, 0.95, 0.85, 1)
 light_energy = 1.5
 shadow_enabled = true
+directional_shadow_max_distance = 50.0
 
 [node name="GroundBody" type="StaticBody3D" parent="." unique_id=1825113920]
 
 [node name="Players" type="Node3D" parent="." unique_id=1880964014]
 
-[node name="MobileUI" parent="." unique_id=23906443 instance=ExtResource("2")]
+[node name="UILayer" type="CanvasLayer" parent="." unique_id=1650372411]
+layer = 10
 
-[node name="PauseMenu" parent="." unique_id=498414101 instance=ExtResource("3")]
+[node name="MobileUI" parent="UILayer" unique_id=23906443 instance=ExtResource("2")]
+
+[node name="PauseMenu" parent="UILayer" unique_id=498414101 instance=ExtResource("3")]
 
 [node name="SpawnPoints" type="Node3D" parent="." unique_id=217323524]
 

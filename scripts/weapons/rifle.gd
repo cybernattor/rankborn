@@ -37,6 +37,7 @@ const MAX_SCORCH_MARKS := 50
 # Меши и материалы эффектов попадания общие для всех выстрелов:
 # создаются один раз, а не на каждое попадание.
 static var _impact_assets: Dictionary = {}
+const PREWARM_MARK_LIFETIME := 0.2
 
 
 func _ready() -> void:
@@ -218,6 +219,25 @@ func _shoot_effects() -> void:
 	muzzle_light.light_energy = 1.5
 	get_tree().create_timer(0.04).timeout.connect(func():
 		muzzle_light.light_energy = 0.0
+	)
+
+
+## Один раз показать все эффекты выстрела перед камерой в начале матча (под затемнением):
+## шейдер материала компилируется при первой отрисовке, и без прогрева первый выстрел,
+## первое попадание и первая кровь давали заметный рывок кадра, особенно на телефонах.
+func prewarm_effects(at: Vector3) -> void:
+	_shoot_effects()
+	_spawn_impact(at, Vector3.UP)
+	_spawn_impact(at + Vector3.UP * 0.5, Vector3.BACK)
+	_spawn_tracer(muzzle_flash.global_position, at)
+	_spawn_blood(at + Vector3.UP, Vector3.UP)
+	# Следы пуль от прогрева убираем, как только они отрисовались.
+	var marks := _scorch_marks.slice(-2)
+	get_tree().create_timer(PREWARM_MARK_LIFETIME).timeout.connect(func():
+		for mark in marks:
+			_scorch_marks.erase(mark)
+			if is_instance_valid(mark):
+				mark.queue_free()
 	)
 
 

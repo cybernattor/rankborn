@@ -23,6 +23,7 @@ var player_name: String = ""
 
 func _ready() -> void:
 	load_settings()
+	_apply_touch_input_map()
 
 
 func load_settings() -> void:
@@ -53,7 +54,13 @@ func save_settings() -> void:
 
 
 ## Включить сенсорный режим на ПК (тесты, отладка без телефона). Не сохраняется.
-var force_touch: bool = false
+var force_touch: bool = false:
+	set(value):
+		force_touch = value
+		_apply_touch_input_map()
+
+## Кнопки мыши, снятые с игровых действий на тач-экране (действие → события).
+var _removed_mouse_events: Dictionary = {}
 
 
 ## Мобильный сенсорный интерфейс нужен на телефонах/планшетах (нативно и в вебе).
@@ -69,3 +76,23 @@ func uses_aim_toggle() -> bool:
 
 func uses_crouch_toggle() -> bool:
 	return crouch_toggle or is_touch_device()
+
+
+# Касания эмулируют мышь (input_devices/pointing/emulate_mouse_from_touch): без этого
+# на Android не фокусируются поля ввода и не тянутся слайдеры. Но тогда любое касание —
+# ещё и клик левой кнопкой, то есть выстрел. Поэтому на тач-экране снимаем кнопки мыши
+# с игровых действий; стрельбу и прицел там нажимает MobileUI.
+func _apply_touch_input_map() -> void:
+	if is_touch_device():
+		for action in InputMap.get_actions():
+			if String(action).begins_with("ui_"):
+				continue
+			for event in InputMap.action_get_events(action):
+				if event is InputEventMouseButton:
+					InputMap.action_erase_event(action, event)
+					_removed_mouse_events.get_or_add(action, []).append(event)
+	else:
+		for action in _removed_mouse_events:
+			for event in _removed_mouse_events[action]:
+				InputMap.action_add_event(action, event)
+		_removed_mouse_events.clear()

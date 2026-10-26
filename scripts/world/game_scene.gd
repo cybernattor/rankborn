@@ -5,8 +5,8 @@ extends Node3D
 
 @onready var players_node: Node3D = $Players
 @onready var spawn_points: Node3D = $SpawnPoints
-@onready var mobile_ui: Control = $MobileUI
-@onready var pause_menu: Control = $PauseMenu
+@onready var mobile_ui: Control = $UILayer/MobileUI
+@onready var pause_menu: Control = $UILayer/PauseMenu
 @onready var game_mode: GameMode = $GameMode
 
 const TERRAIN_SIZE := 100.0
@@ -14,6 +14,11 @@ const TERRAIN_RESOLUTION := 60
 const TERRAIN_SEED := 42
 ## Зазор между ногами и землёй при спавне: капсула не должна начинать внутри склона.
 const SPAWN_CLEARANCE := 0.1
+## Затемнение в начале матча: под ним проходит рывок загрузки и прогрев эффектов.
+const FADE_IN_HOLD := 0.3
+const FADE_IN_TIME := 0.5
+## На каком расстоянии перед игроком прогревать эффекты (должны попасть в кадр).
+const PREWARM_DISTANCE := 4.0
 
 var player_scene := preload("res://scenes/shared/player.tscn")
 var local_player_id: int = 1
@@ -42,6 +47,7 @@ func _ready() -> void:
 	mobile_ui.pause_pressed.connect(pause_menu.toggle)
 	pause_menu.visibility_changed.connect(_on_pause_visibility_changed)
 	_bind_local_player_ui()
+	_fade_in_with_prewarm()
 
 
 func _build_lowpoly_terrain() -> void:
@@ -59,6 +65,26 @@ func _build_lowpoly_terrain() -> void:
 	terrain_collision.backface_collision = true
 	col.shape = terrain_collision
 	ground_body.add_child(col)
+
+
+func _fade_in_with_prewarm() -> void:
+	var fade := ColorRect.new()
+	fade.color = Color.BLACK
+	fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	fade.set_anchors_preset(Control.PRESET_FULL_RECT)
+	$UILayer.add_child(fade)
+	var player := _get_local_player()
+	if player:
+		var weapon = player.weapon_manager.get_current_weapon()
+		if weapon and weapon.has_method("prewarm_effects"):
+			var forward: Vector3 = -player.global_transform.basis.z
+			var at: Vector3 = player.global_position + forward * PREWARM_DISTANCE
+			at.y = MeshUtils.terrain_height_at(TERRAIN_SIZE, TERRAIN_RESOLUTION, TERRAIN_SEED, at.x, at.z)
+			weapon.prewarm_effects(at)
+	var tween := create_tween()
+	tween.tween_interval(FADE_IN_HOLD)
+	tween.tween_property(fade, "modulate:a", 0.0, FADE_IN_TIME)
+	tween.tween_callback(fade.queue_free)
 
 
 func _on_player_connected(id: int) -> void:

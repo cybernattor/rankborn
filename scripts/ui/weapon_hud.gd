@@ -33,6 +33,12 @@ const SPREAD_SPEED := 16.0
 # Hit marker
 var _hit_marker_tween: Tween
 
+## На тач-экране патроны поднимаются над кнопками справа внизу, иначе FIRE их закрывает.
+const TOUCH_AMMO_OFFSET_Y := -340.0
+## Счётчик кадров в отладочных сборках — чтобы тестеры могли назвать цифры.
+var _fps_label: Label
+var _touch_layout: bool = false
+
 
 func _ready() -> void:
 	visible = false
@@ -40,6 +46,13 @@ func _ready() -> void:
 		reload_bar.visible = false
 	if hit_marker:
 		hit_marker.visible = false
+	if OS.is_debug_build():
+		_fps_label = Label.new()
+		_fps_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_fps_label.position = Vector2(16, 12)
+		_fps_label.add_theme_color_override("font_outline_color", Color.BLACK)
+		_fps_label.add_theme_constant_override("outline_size", 4)
+		$UILayer.add_child(_fps_label)
 
 
 func setup(weapon_mgr: WeaponManager) -> void:
@@ -77,6 +90,9 @@ func _get_weapon() -> WeaponBase:
 
 
 func _process(delta: float) -> void:
+	_update_touch_layout()
+	if _fps_label:
+		_fps_label.text = "FPS %d" % Engine.get_frames_per_second()
 	var weapon := _get_weapon()
 	if not weapon:
 		return
@@ -141,6 +157,17 @@ func _calculate_spread() -> float:
 	var half_height := get_viewport().get_visible_rect().size.y * 0.5
 	var focal_length := half_height / tan(deg_to_rad(camera.fov) * 0.5)
 	return maxf(0.0, tan(weapon.get_spread_angle()) * focal_length - BASE_GAP)
+
+
+func _update_touch_layout() -> void:
+	var touch := GameSettings.is_touch_device()
+	if touch == _touch_layout:
+		return
+	_touch_layout = touch
+	var shift := TOUCH_AMMO_OFFSET_Y if touch else -TOUCH_AMMO_OFFSET_Y
+	var ammo_box: Control = $UILayer/BottomRight
+	ammo_box.offset_top += shift
+	ammo_box.offset_bottom += shift
 
 
 func _set_scope_visible(show_scope: bool) -> void:
