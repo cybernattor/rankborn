@@ -9,6 +9,8 @@ class_name PlayerState
 const SPEED := 5.0
 const SPRINT_SPEED := 7.5
 const CROUCH_SPEED := 2.5
+## С прицелом идут медленно, как в Foxhole.
+const AIM_SPEED := 2.2
 const JUMP_VELOCITY := 4.5
 const GROUND_ACCEL := 45.0
 const GROUND_DECEL := 55.0
@@ -38,6 +40,8 @@ const SPRINT_MAX_ANGLE_COS := 0.5
 
 
 func _move_speed(input_dir: Vector2) -> float:
+	if player.is_aiming:
+		return minf(AIM_SPEED, CROUCH_SPEED) if player.is_crouching else AIM_SPEED
 	if player.is_crouching:
 		return CROUCH_SPEED
 	if Input.is_action_pressed("sprint") and input_dir.length() > 0.5 and not player.is_aiming:

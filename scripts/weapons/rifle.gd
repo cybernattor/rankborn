@@ -3,20 +3,20 @@ class_name Rifle
 
 ## Винтовка — hitscan-оружие с распространением, отдачей и эффектами попаданий.
 
-# --- Параметры распространения (spread/bloom), радианы конуса ---
-# С камерой сверху конус виден на земле, поэтому он шире, чем был от первого лица:
-# прицеливание сужает его — это главная награда за остановку и ADS (как у Foxhole).
-const BLOOM_PER_SHOT := 0.012
-const BLOOM_DECAY_SPEED := 1.5
-const MAX_BLOOM := 0.2
-
-const SPREAD_IDLE := 0.035
-const SPREAD_WALK := 0.06
-const SPREAD_RUN := 0.11
-const SPREAD_ADS := 0.01
-const SPREAD_ADS_FIRING := 0.018
-const SPREAD_HIPFIRE_FIRING := 0.05
-const SPREAD_WALK_FIRING := 0.07
+# --- Разброс (радианы конуса) ---
+# Винтовка как у Foxhole: один осознанный выстрел, затвор ~1 с (параметры — в rifle.tscn).
+# Разброс от бедра широкий; пока прицел зажат, он сводится к прицельному за
+# Player.AIM_TIME (aim_progress). Выстрел сбивает сведение (Player.on_shot_fired).
+const SPREAD_IDLE := 0.06
+const SPREAD_WALK := 0.09
+const SPREAD_RUN := 0.15
+## Полностью сведённый прицел стоя и на ходу.
+const SPREAD_AIMED := 0.008
+const SPREAD_AIMED_MOVING := 0.03
+# Накопление между выстрелами (быстрая стрельба без сведения).
+const BLOOM_PER_SHOT := 0.015
+const BLOOM_DECAY_SPEED := 0.5
+const MAX_BLOOM := 0.06
 ## Дальность выстрела, м.
 const RANGE := 80.0
 
@@ -141,8 +141,10 @@ func shoot() -> void:
 		else:
 			_spawn_impact.rpc(hit_position, hit_normal)
 
-	# Накопление bloom
+	# Накопление и сбитое сведение прицела
 	bloom_accumulation = minf(bloom_accumulation + BLOOM_PER_SHOT, MAX_BLOOM)
+	if player and player.has_method("on_shot_fired"):
+		player.on_shot_fired()
 
 	fired.emit()
 	await get_tree().create_timer(fire_rate).timeout
@@ -173,26 +175,18 @@ func _apply_bullet_spread() -> void:
 	raycast.force_raycast_update()
 
 
-# Разброс в радианах: одна величина для выстрела и экранного прицела.
+# Разброс в радианах: одна величина для выстрела, прицела HUD и конуса на земле.
 func get_spread_angle() -> float:
 	var player := _get_player()
 	var spread := SPREAD_IDLE
-
 	if player:
 		var speed := Vector2(player.velocity.x, player.velocity.z).length()
-		var aiming: bool = player.get("is_aiming") if "is_aiming" in player else false
-
-		if aiming:
-			spread = SPREAD_ADS_FIRING if is_firing else SPREAD_ADS
-		else:
-			if speed > SPEED_RUN_THRESHOLD:
-				spread = SPREAD_RUN
-			elif speed > 1.0:
-				spread = SPREAD_WALK_FIRING if is_firing else SPREAD_WALK
-			else:
-				spread = SPREAD_HIPFIRE_FIRING if is_firing else SPREAD_IDLE
-
-	return spread + bloom_accumulation * 0.5
+		var moving := speed > 1.0
+		var hip := SPREAD_RUN if speed > SPEED_RUN_THRESHOLD else (SPREAD_WALK if moving else SPREAD_IDLE)
+		var aimed := SPREAD_AIMED_MOVING if moving else SPREAD_AIMED
+		var progress: float = player.aim_progress if "aim_progress" in player else 0.0
+		spread = lerpf(hip, aimed, progress)
+	return spread + bloom_accumulation
 
 
 func _get_damage_with_falloff(distance: float) -> float:

@@ -27,9 +27,18 @@ var input_blocked: bool = false
 var weapon_hud: CanvasLayer
 var death_screen: DeathScreen
 
-# Прицеливание: в прицеле (ADS) камера уходит дальше в сторону взгляда,
-# а разброс сужается (Rifle.get_spread_angle) — зума нет, как у Foxhole.
+# Прицеливание как у Foxhole: зума нет. Пока прицел зажат, конус разброса
+# сужается за AIM_TIME (aim_progress 0 → 1, Rifle.get_spread_angle), камера уходит
+# дальше в сторону взгляда, а солдат идёт медленно (PlayerState). Выстрел сбивает
+# прицел — после него снова надо довести.
 var is_aiming: bool = false
+var aim_progress: float = 0.0
+const AIM_TIME := 0.8
+## На ходу прицел сводится медленнее.
+const AIM_MOVING_RATE := 0.4
+const AIM_MOVING_SPEED := 1.0
+## Какая доля сведения остаётся после выстрела.
+const AIM_SHOT_KEEP := 0.35
 ## Точка, куда целится игрок (мир): на высоте выстрела над землёй под прицелом.
 var aim_point: Vector3 = Vector3.ZERO
 var _aim_direction := Vector3.FORWARD
@@ -38,12 +47,20 @@ var _aim_distance: float = STICK_AIM_DISTANCE
 var _mouse_aim: bool = true
 ## Высота выстрела над ногами: от груди, а не от глаз — пуля летит из оружия.
 const SHOT_HEIGHT := 1.25
-## Стиком (геймпад, тач) целимся на фиксированную дальность; в прицеле — дальше.
-## Точка прицела должна оставаться на экране: по вертикали камера сверху видит
-## примерно ±9 м от центра, и при 16 м прицел стиком «вверх» уходил за край.
+## Стиком (геймпад, тач) дальность прицела задаёт отклонение: чуть — близко, до края —
+## STICK_AIM_DISTANCE (в прицеле дальше). Точка прицела должна оставаться на экране:
+## по вертикали камера сверху видит примерно ±9 м от центра.
+const STICK_AIM_MIN_DISTANCE := 4.0
 const STICK_AIM_DISTANCE := 11.0
-const STICK_AIM_DISTANCE_ADS := 20.0
+const STICK_AIM_DISTANCE_ADS := 15.0
 const STICK_AIM_DEADZONE := 0.2
+## Поворот прицела стиком — плавный и с пределом скорости: мгновенный поворот за стиком
+## дёргал прицел от дрожи пальца и был слишком быстрым. В прицеле — медленнее и точнее.
+## Мышь точна сама по себе, её не сглаживаем.
+const STICK_TURN_SMOOTHING := 14.0
+const STICK_TURN_SPEED := 6.0
+const STICK_TURN_SPEED_ADS := 2.2
+const STICK_DISTANCE_SMOOTHING := 8.0
 ## Курсор ближе этого к игроку не меняет направление: иначе персонаж крутится на месте.
 const MIN_MOUSE_AIM_DISTANCE := 1.0
 
@@ -94,6 +111,10 @@ func _ready() -> void:
 		death_screen = DeathScreen.new()
 		death_screen.name = "DeathScreen"
 		add_child(death_screen)
+		var aim_cone := AimCone.new()
+		aim_cone.name = "AimCone"
+		aim_cone.player = self
+		add_child(aim_cone)
 
 		# Туман войны: свою позицию шлём только тем, кого назовёт хост
 		# (VisibilityManager), и всегда — самому хосту.
@@ -220,8 +241,9 @@ func _process(delta: float) -> void:
 	if not is_multiplayer_authority():
 		return
 	_update_aim()
+	_update_aim_progress(delta)
 	if can_control():
-		_update_aim_direction()
+		_update_aim_direction(delta)
 		rotation.y = atan2(-_aim_direction.x, -_aim_direction.z)
 	aim_point = _compute_aim_point()
 
@@ -229,15 +251,22 @@ func _process(delta: float) -> void:
 ## Направление прицеливания: правый стик (геймпад; на таче его нажимает MobileUI)
 ## или курсор мыши. Камера не вращается, поэтому стик задаёт направление в мире
 ## напрямую: вверх по экрану — это −Z.
-func _update_aim_direction() -> void:
+func _update_aim_direction(delta: float) -> void:
 	var stick := Input.get_vector("look_left", "look_right", "look_up", "look_down")
 	if stick.length() > STICK_AIM_DEADZONE:
 		_mouse_aim = false
-		_aim_direction = Vector3(stick.x, 0.0, stick.y).normalized()
-		_aim_distance = STICK_AIM_DISTANCE_ADS if is_aiming else STICK_AIM_DISTANCE
+		var target := Vector3(stick.x, 0.0, stick.y).normalized()
+		var angle := _aim_direction.signed_angle_to(target, Vector3.UP)
+		var max_turn := (STICK_TURN_SPEED_ADS if is_aiming else STICK_TURN_SPEED) * delta
+		var turn := clampf(angle * (1.0 - exp(-STICK_TURN_SMOOTHING * delta)), -max_turn, max_turn)
+		_aim_direction = _aim_direction.rotated(Vector3.UP, turn).normalized()
+		var reach := inverse_lerp(STICK_AIM_DEADZONE, 1.0, minf(stick.length(), 1.0))
+		var far := STICK_AIM_DISTANCE_ADS if is_aiming else STICK_AIM_DISTANCE
+		var distance := lerpf(STICK_AIM_MIN_DISTANCE, far, reach)
+		_aim_distance = lerpf(_aim_distance, distance, 1.0 - exp(-STICK_DISTANCE_SMOOTHING * delta))
 		return
+	# Стик отпущен — прицел остаётся, где был (на таче выстрел происходит в момент отпускания).
 	if not _mouse_aim:
-		_aim_distance = STICK_AIM_DISTANCE_ADS if is_aiming else STICK_AIM_DISTANCE
 		return
 	var cursor := get_viewport().get_mouse_position()
 	var on_plane := camera.screen_to_plane(cursor, get_shot_origin().y)
@@ -249,16 +278,30 @@ func _update_aim_direction() -> void:
 
 func _compute_aim_point() -> Vector3:
 	var point := global_position + _aim_direction * _aim_distance
-	point.y = _ground_height_at(point) + SHOT_HEIGHT
+	point.y = ground_height_at(point) + SHOT_HEIGHT
 	return point
 
 
-# Высота земли без физики (та же формула, что у меша); вне игровой сцены — свой уровень.
-func _ground_height_at(point: Vector3) -> float:
+## Высота земли без физики (та же формула, что у меша); вне игровой сцены — свой уровень.
+func ground_height_at(point: Vector3) -> float:
 	var scene := get_tree().current_scene
 	if scene and scene.has_method("ground_height_at"):
 		return scene.ground_height_at(point.x, point.z)
 	return global_position.y
+
+
+func _update_aim_progress(delta: float) -> void:
+	if not is_aiming:
+		aim_progress = 0.0
+		return
+	var moving := Vector2(velocity.x, velocity.z).length() > AIM_MOVING_SPEED
+	var rate := (AIM_MOVING_RATE if moving else 1.0) / AIM_TIME
+	aim_progress = minf(aim_progress + rate * delta, 1.0)
+
+
+## Выстрел сбивает сведение прицела (вызывает Rifle).
+func on_shot_fired() -> void:
+	aim_progress *= AIM_SHOT_KEEP
 
 
 func _update_aim() -> void:

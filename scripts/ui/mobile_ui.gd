@@ -8,11 +8,13 @@ extends Control
 ## Раскладка:
 ## - левая нижняя часть экрана — плавающий стик движения (появляется под пальцем);
 ##   отклонение до края включает спринт;
-## - правая нижняя часть — плавающий стик прицела: направление задаёт, куда смотрит
-##   и стреляет персонаж (действия look_*, как правый стик геймпада); отклонение
-##   дальше FIRE_THRESHOLD — огонь. Так двигаться, целиться и стрелять можно двумя
-##   пальцами, без «третьей руки»;
-## - над стиком прицела — ряд DUCK, R, AIM, JUMP;
+## - правая нижняя часть — плавающий стик прицела, схема Foxhole на тач:
+##   взял стик — целишься (зажато действие aim: конус сводится, солдат идёт медленно),
+##   направление и дальность — куда и насколько отклонил (look_*, как правый стик
+##   геймпада), отпустил — выстрел. Вернул палец в центр (внутреннее кольцо) и отпустил —
+##   выстрела нет. Целиться и стрелять — два разных решения, как ПКМ и ЛКМ у Foxhole:
+##   раньше стик стрелял при сильном отклонении, и точно навестись, не выстрелив, было нельзя;
+## - над стиком прицела — ряд DUCK, R, JUMP;
 ## - FIRE слева — стрельба без смены направления (стоя на месте, второй рукой).
 ##
 ## Каждый палец отслеживается по event.index, поэтому мультитач работает полностью.
@@ -30,15 +32,19 @@ const LOOK_ACTIONS := ["look_left", "look_right", "look_up", "look_down"]
 const AIM_ZONE_LEFT := 0.55
 const AIM_ZONE_TOP := 0.45
 const AIM_STICK_MARGIN := Vector2(200, 180)
-## Отклонение стика прицела, с которого он стреляет (доля радиуса).
-const FIRE_THRESHOLD := 0.7
+## Отпускание стика прицела ближе этого к центру (доля радиуса) — отмена выстрела.
+const AIM_CANCEL_RADIUS := 0.3
+## Сколько держим «огонь» после отпускания стика: стейты опрашивают ввод в физике,
+## мгновенное нажатие-отпускание они бы пропустили. Если винтовка ещё передёргивает
+## затвор, ждём выстрела, но не дольше SHOT_MAX_WAIT.
+const SHOT_HOLD := 0.1
+const SHOT_MAX_WAIT := 1.3
 
 ## Кнопки — рядом над зоной стика прицела, справа налево.
 const ROW_BUTTON_RADIUS := 42.0
 const ROW_SPACING := 104.0
 const ROW_BUTTONS := [
 	{"name": "jump", "label": "JUMP", "action": "jump"},
-	{"name": "aim", "label": "AIM", "action": "aim"},
 	{"name": "reload", "label": "R", "action": "reload"},
 	{"name": "crouch", "label": "DUCK", "action": "crouch"},
 ]
@@ -61,8 +67,10 @@ var _stick_index: int = -1
 var _aim_origin := Vector2.ZERO
 var _aim_vector := Vector2.ZERO
 var _aim_index: int = -1
-## Стик прицела сейчас держит «огонь» нажатым.
-var _aim_firing: bool = false
+## Выстрел после отпускания стика ещё не случился (держим «огонь»).
+var _pending_shot: bool = false
+var _pending_time: float = 0.0
+var _pending_ammo: int = 0
 
 
 func _ready() -> void:
@@ -125,9 +133,12 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 
-func _process(_delta: float) -> void:
-	if _active:
-		queue_redraw()  # подсветка прицела/приседа зависит от состояния игрока
+func _process(delta: float) -> void:
+	if not _active:
+		return
+	if _pending_shot:
+		_update_pending_shot(delta)
+	queue_redraw()  # подсветка прицела/приседа зависит от состояния игрока
 
 
 func _on_touch_down(index: int, pos: Vector2) -> void:
@@ -148,6 +159,7 @@ func _on_touch_down(index: int, pos: Vector2) -> void:
 		_aim_index = index
 		_aim_origin = pos
 		_set_aim(Vector2.ZERO)
+		Input.action_press("aim")
 	queue_redraw()
 
 
@@ -166,9 +178,14 @@ func _on_touch_up(index: int) -> void:
 			_stick_origin = _default_stick_origin()
 			_set_stick(Vector2.ZERO)
 		"aim":
+			var fire := _aim_vector.length() >= AIM_CANCEL_RADIUS
 			_aim_index = -1
 			_aim_origin = _default_aim_origin()
 			_set_aim(Vector2.ZERO)
+			if fire:
+				_start_pending_shot()
+			else:
+				Input.action_release("aim")
 	queue_redraw()
 
 
@@ -204,14 +221,44 @@ func _set_aim(vec: Vector2) -> void:
 	_set_action_strength("look_right", maxf(vec.x, 0.0))
 	_set_action_strength("look_up", maxf(-vec.y, 0.0))
 	_set_action_strength("look_down", maxf(vec.y, 0.0))
-	var firing := vec.length() >= FIRE_THRESHOLD
-	if firing != _aim_firing:
-		_aim_firing = firing
-		if firing:
-			Input.action_press("shoot")
-		elif not _is_action_held_by_other("shoot"):
-			Input.action_release("shoot")
 	queue_redraw()
+
+
+# Прицел держим зажатым до выстрела: иначе в момент выстрела разброс уже снова от бедра.
+func _start_pending_shot() -> void:
+	_pending_shot = true
+	_pending_time = 0.0
+	_pending_ammo = _current_ammo()
+	Input.action_press("shoot")
+
+
+func _update_pending_shot(delta: float) -> void:
+	_pending_time += delta
+	var fired := _current_ammo() < _pending_ammo
+	var weapon := _current_weapon()
+	var cannot := weapon == null or weapon.is_reloading or weapon.current_ammo <= 0
+	if (_pending_time >= SHOT_HOLD and (fired or cannot)) or _pending_time >= SHOT_MAX_WAIT:
+		_finish_pending_shot()
+
+
+func _finish_pending_shot() -> void:
+	_pending_shot = false
+	if not _is_action_held_by_other("shoot"):
+		Input.action_release("shoot")
+	# Новое касание стика прицела уже снова держит прицел — не отпускаем его.
+	if _aim_index == -1:
+		Input.action_release("aim")
+
+
+func _current_weapon() -> WeaponBase:
+	if player and player.weapon_manager:
+		return player.weapon_manager.get_current_weapon()
+	return null
+
+
+func _current_ammo() -> int:
+	var weapon := _current_weapon()
+	return weapon.current_ammo if weapon else 0
 
 
 func _set_action_strength(action: String, strength: float) -> void:
@@ -222,7 +269,7 @@ func _set_action_strength(action: String, strength: float) -> void:
 
 
 func _is_action_held_by_other(action: String) -> bool:
-	if action == "shoot" and _aim_firing:
+	if action == "shoot" and _pending_shot:
 		return true
 	for touch in _touches.values():
 		if touch.role == "button" and _buttons[touch.button].action == action:
@@ -251,7 +298,8 @@ func _release_all() -> void:
 		Input.action_release(action)
 	Input.action_release("sprint")
 	Input.action_release("shoot")
-	_aim_firing = false
+	Input.action_release("aim")
+	_pending_shot = false
 	_stick_vector = Vector2.ZERO
 	_aim_vector = Vector2.ZERO
 	queue_redraw()
@@ -262,8 +310,6 @@ func _is_button_lit(name: String) -> bool:
 		if touch.role == "button" and touch.button == name:
 			return true
 	if player:
-		if name == "aim":
-			return player.is_aiming
 		if name == "crouch":
 			return player.is_crouching
 	return false
@@ -275,10 +321,13 @@ func _draw() -> void:
 	draw_circle(_stick_origin, STICK_RADIUS, COLOR_FILL)
 	draw_arc(_stick_origin, STICK_RADIUS, 0.0, TAU, 48, COLOR_RING, 2.0, true)
 	draw_circle(_stick_origin + _stick_vector * STICK_RADIUS, 32.0, COLOR_RING)
-	# Стик прицела: внутреннее кольцо — порог огня, при стрельбе заливка красная
-	draw_circle(_aim_origin, STICK_RADIUS, COLOR_FIRE if _aim_firing else COLOR_FILL)
+	# Стик прицела: пока держишь — подсвечен (целишься), внутри кольца отмены — красный
+	# (отпустишь здесь — выстрела не будет)
+	var aiming := _aim_index != -1
+	var cancel := aiming and _aim_vector.length() < AIM_CANCEL_RADIUS
+	draw_circle(_aim_origin, STICK_RADIUS, COLOR_FIRE if cancel else (COLOR_FILL_ACTIVE if aiming else COLOR_FILL))
 	draw_arc(_aim_origin, STICK_RADIUS, 0.0, TAU, 48, COLOR_RING, 2.0, true)
-	draw_arc(_aim_origin, STICK_RADIUS * FIRE_THRESHOLD, 0.0, TAU, 48, COLOR_RING * Color(1, 1, 1, 0.5), 1.5, true)
+	draw_arc(_aim_origin, STICK_RADIUS * AIM_CANCEL_RADIUS, 0.0, TAU, 32, COLOR_RING * Color(1, 1, 1, 0.5), 1.5, true)
 	draw_circle(_aim_origin + _aim_vector * STICK_RADIUS, 32.0, COLOR_RING)
 	# Кнопки
 	for name in _buttons:

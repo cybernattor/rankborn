@@ -172,12 +172,24 @@ func _check_shots(world: Node3D, player: CharacterBody3D, rifle: Node3D) -> void
 		_check(rifle.raycast.get_collider() == target, "Выстрел не летит в сторону прицела")
 		var shot: Vector3 = rifle.raycast.get_collision_point() - origin
 		_check(shot.angle_to(dir) <= rifle.get_spread_angle() * 1.06 + 0.001, "Выстрел вне конуса разброса")
-	# Прицеливание сужает конус.
+	# Прицеливание как у Foxhole: конус сводится за AIM_TIME, а не сразу; выстрел сбивает сведение.
 	player.is_aiming = false
+	player._update_aim_progress(0.1)
 	var hip: float = rifle.get_spread_angle()
 	player.is_aiming = true
-	_check(rifle.get_spread_angle() < hip * 0.5, "Прицеливание не сужает разброс")
+	player._update_aim_progress(player.AIM_TIME * 0.25)
+	var quarter: float = rifle.get_spread_angle()
+	_check(quarter < hip and quarter > hip * 0.5, "Прицел сводится мгновенно, а не постепенно")
+	player._update_aim_progress(player.AIM_TIME)
+	_check(is_equal_approx(player.aim_progress, 1.0) and rifle.get_spread_angle() < hip * 0.25, "Сведённый прицел не сужает разброс")
+	player.on_shot_fired()
+	_check(player.aim_progress < 0.5, "Выстрел не сбивает сведение прицела")
 	player.is_aiming = false
+	player._update_aim_progress(0.1)
+	_check(is_zero_approx(player.aim_progress), "Сведение остаётся после отпускания прицела")
+	# Винтовка как у Foxhole: обойма 5, затвор ~1 с, три попадания на убийство.
+	_check(rifle.magazine_size == 5 and rifle.fire_rate >= 1.0 and ceili(player.health_component.max_health / rifle.damage) == 3,
+			"Винтовка не как у Foxhole")
 	var tip: Vector3 = rifle.rifle_mesh.position + Vector3(0, 0, rifle.rifle_mesh.mesh.get_aabb().position.z)
 	_check(tip.is_equal_approx(rifle.muzzle_flash.position))
 	var outline: MeshInstance3D = rifle.rifle_mesh.get_child(0)

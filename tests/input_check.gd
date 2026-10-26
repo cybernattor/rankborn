@@ -105,9 +105,15 @@ func _check_aim() -> void:
 	await _mouse_to(_player_on_screen() + Vector2(0, -200))
 	_check(player.get_aim_direction().dot(Vector3.FORWARD) > 0.95, "Курсор сверху не поворачивает прицел вперёд")
 	# Правый стик геймпада задаёт направление и перехватывает прицел у мыши.
+	# Поворот стиком плавный: не скачком за один кадр (дрожь пальца дёргала прицел),
+	# но и не вязкий — за полсекунды доходит.
+	var before: Vector3 = player.get_aim_direction()
 	_stick(JOY_AXIS_RIGHT_X, 1.0)
 	await process_frame
 	await process_frame
+	_check(player.get_aim_direction().angle_to(Vector3.RIGHT) > 0.2 or before.angle_to(Vector3.RIGHT) < 0.2,
+			"Стик поворачивает прицел скачком")
+	await create_timer(0.5).timeout
 	_check(player.get_aim_direction().dot(Vector3.RIGHT) > 0.95, "Правый стик не задаёт направление прицела")
 	_stick(JOY_AXIS_RIGHT_X, 0.0)
 	await process_frame
@@ -162,6 +168,10 @@ func _check_movement() -> void:
 	await _hold("sprint", 30)
 	_check(is_equal_approx(_horizontal_speed(), PlayerState.SPRINT_SPEED), "Спринт не работает")
 	Input.action_release("sprint")
+	# С зажатым прицелом идут медленно, как в Foxhole.
+	await _hold("aim", 40)
+	_check(is_equal_approx(_horizontal_speed(), PlayerState.AIM_SPEED), "С прицелом солдат не замедляется")
+	Input.action_release("aim")
 	Input.action_release("move_forward")
 	await physics_frame
 	await physics_frame
@@ -275,50 +285,62 @@ func _check_touch() -> void:
 	_check(_move_vector().length() <= 1.0001, "Ограничение стика не круглое")
 	await _drag(0, start + Vector2(0, -200), Vector2(-200, 0))
 	_check(Input.is_action_pressed("sprint"), "Стик до упора не включает спринт")
-	# Второй палец — стик прицела справа: лёгкое отклонение целится, сильное — стреляет.
+	# Второй палец — стик прицела справа, схема Foxhole: держишь — целишься, отпустил — выстрел.
 	var aim_start := Vector2(size.x * 0.8, size.y * 0.75)
+	var rifle: Node = player.weapon_manager.get_current_weapon()
+	rifle.current_ammo = rifle.magazine_size
+	rifle.can_fire = true
 	await _touch(1, aim_start, true)
 	_check(ui._aim_origin == aim_start, "Стик прицела не появляется под пальцем")
-	await _drag(1, aim_start + Vector2(40, 0), Vector2(40, 0))
-	await process_frame
+	await _drag(1, aim_start + Vector2(30, 0), Vector2(30, 0))
+	await create_timer(0.5).timeout
+	_check(player.is_aiming, "Стик прицела не держит прицел")
+	_check(not Input.is_action_pressed("shoot"), "Стик прицела стреляет, пока его держат")
 	_check(player.get_aim_direction().dot(Vector3.RIGHT) > 0.95, "Стик прицела не поворачивает прицел")
-	_check(not Input.is_action_pressed("shoot"), "Лёгкое отклонение стика прицела стреляет")
-	await _drag(1, aim_start + Vector2(0, -80), Vector2(-40, -80))
-	await process_frame
+	var near: float = player._aim_distance
+	await _drag(1, aim_start + Vector2(0, -80), Vector2(-30, -80))
+	await create_timer(0.6).timeout
 	_check(player.get_aim_direction().dot(Vector3.FORWARD) > 0.95, "Стик прицела вверх не целится вперёд")
-	_check(Input.is_action_pressed("shoot"), "Стик прицела до края не стреляет")
+	_check(player._aim_distance > near + 3.0, "Отклонение стика не задаёт дальность")
+	_check(player.aim_progress > 0.4, "Прицел не сводится, пока держишь стик")
+	var ammo: int = rifle.current_ammo
 	await _touch(1, aim_start, false)
-	_check(not Input.is_action_pressed("shoot"), "Стрельба залипает после стика прицела")
+	await create_timer(0.3).timeout
+	_check(rifle.current_ammo == ammo - 1, "Отпускание стика прицела не стреляет")
+	_check(not Input.is_action_pressed("shoot") and not Input.is_action_pressed("aim"), "Стрельба или прицел залипают после выстрела")
 	_check(Input.get_vector("look_left", "look_right", "look_up", "look_down") == Vector2.ZERO, "Прицел залипает после отпускания")
+	_check(player.get_aim_direction().dot(Vector3.FORWARD) > 0.95, "Направление сбрасывается при отпускании стика")
 	await _touch(0, start, false)
 	_check(_move_vector() == Vector2.ZERO and not Input.is_action_pressed("sprint"), "Движение залипает после отпускания")
-	# FIRE слева стреляет; отпускание стика прицела не отпускает её огонь.
+	# Вернул палец в центр и отпустил — выстрела нет.
+	await create_timer(1.2).timeout  # затвор
+	ammo = rifle.current_ammo
+	await _touch(2, aim_start, true)
+	await _drag(2, aim_start + Vector2(70, 0), Vector2(70, 0))
+	await _drag(2, aim_start + Vector2(5, 0), Vector2(-65, 0))
+	await _touch(2, aim_start + Vector2(5, 0), false)
+	await create_timer(0.3).timeout
+	_check(rifle.current_ammo == ammo and not Input.is_action_pressed("aim"), "Отмена в центре стика всё равно стреляет")
+	# FIRE слева стреляет; выстрел стиком прицела не отпускает её огонь.
 	var fire_left: Vector2 = ui._buttons.fire_left.center
-	await _touch(2, fire_left, true)
-	await _touch(3, aim_start, true)
-	await _drag(3, aim_start + Vector2(80, 0), Vector2(80, 0))
-	await _touch(3, aim_start, false)
-	_check(Input.is_action_pressed("shoot"), "Отпускание стика прицела отпускает FIRE слева")
-	await _touch(2, fire_left, false)
+	await _touch(3, fire_left, true)
+	await _touch(4, aim_start, true)
+	await _drag(4, aim_start + Vector2(80, 0), Vector2(80, 0))
+	await _touch(4, aim_start, false)
+	await create_timer(1.4).timeout
+	_check(Input.is_action_pressed("shoot"), "Выстрел стиком прицела отпускает FIRE слева")
+	await _touch(3, fire_left, false)
 	_check(not Input.is_action_pressed("shoot"))
-	# AIM на тач-экране — переключатель.
-	var aim: Vector2 = ui._buttons.aim.center
-	await _touch(4, aim, true)
-	await _touch(4, aim, false)
-	await process_frame
-	_check(player.is_aiming, "AIM на тач-экране не включает прицел")
-	await _touch(4, aim, true)
-	await _touch(4, aim, false)
-	await process_frame
-	_check(not player.is_aiming, "AIM на тач-экране не выключает прицел")
-	# Смерть со стреляющим стиком прицела: отпускание во время смерти не теряется.
+	_check(not ui._buttons.has("aim"), "Кнопка AIM на таче лишняя: прицел держит стик")
+	# Смерть с зажатым стиком прицела: отпускание во время смерти не залипает.
 	await _touch(5, aim_start, true)
 	await _drag(5, aim_start + Vector2(80, 0), Vector2(80, 0))
 	player.health_component.take_damage(9999.0)
 	await process_frame
 	await _touch(5, aim_start, false)
 	await create_timer(2.3).timeout
-	_check(player.health_component.is_alive and not Input.is_action_pressed("shoot"), "Стрельба залипает после смерти")
+	_check(player.health_component.is_alive and not Input.is_action_pressed("shoot") and not Input.is_action_pressed("aim"),
+			"Стрельба залипает после смерти")
 	# Кнопка паузы: меню открыто, сенсорный UI выключен и всё отпущено.
 	await _touch(6, start, true)
 	await _drag(6, start + Vector2(0, -60), Vector2(0, -60))
