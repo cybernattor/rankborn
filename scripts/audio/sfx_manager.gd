@@ -1,6 +1,6 @@
 extends Node
 
-## Звуки. Выстрелы и затвор — объёмные (AudioStreamPlayer3D в мире): их слышат все
+## Звуки. Выстрелы, затвор и перезарядка — объёмные (AudioStreamPlayer3D в мире): их слышат все
 ## игроки с той стороны, откуда стреляли, в том числе из-за укрытия и из тумана войны
 ## (выстрел выдаёт стрелка, как в Foxhole). Слушатель стоит у своего солдата, а не у
 ## камеры в 20 м над ним (Player, узел Ears).
@@ -12,12 +12,14 @@ const MAX_DISTANCE := 120.0
 
 var _shot: AudioStream
 var _bolt: AudioStream
+var _reload: AudioStream
 var _empty: AudioStream
 
 
 func _ready() -> void:
 	_shot = load("res://assets/audio/rifle_shot.wav")
 	_bolt = load("res://assets/audio/rifle_bolt.wav")
+	_reload = load("res://assets/audio/rifle_reload.wav")
 	_empty = load("res://assets/audio/empty.wav")
 
 
@@ -54,7 +56,11 @@ func play_shot_at(position: Vector3) -> void:
 
 
 func play_bolt_at(position: Vector3) -> void:
-	_play_at(_bolt, position, -6.0)
+	_play_at(_bolt, position, -3.0)
+
+
+func play_reload_at(position: Vector3) -> void:
+	_play_at(_reload, position, -2.0)
 
 
 func play_empty() -> void:

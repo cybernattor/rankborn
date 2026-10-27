@@ -213,6 +213,7 @@ func reload() -> void:
 		return
 	is_reloading = true
 	reload_timer.start()
+	_reload_effects.rpc(global_position)
 
 
 func _on_reload_finished() -> void:
@@ -244,6 +245,12 @@ func _shoot_effects(origin: Vector3, with_sound: bool = true) -> void:
 		muzzle_light.light_energy = 0.0
 		muzzle_light.visible = false
 	)
+
+
+## Звук перезарядки у всех пиров: позиция приходит в вызове, как и у выстрела.
+@rpc("call_local", "unreliable")
+func _reload_effects(origin: Vector3) -> void:
+	SFXManager.play_reload_at(origin)
 
 
 ## Один раз показать все эффекты выстрела перед камерой в начале матча (под затемнением):

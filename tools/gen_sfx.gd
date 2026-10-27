@@ -9,7 +9,8 @@ extends SceneTree
 ## - хлопка у дула (шум через фильтр низких частот, быстрый спад) и удара (синус,
 ##   падающий по тону, — «тело» выстрела);
 ## - хвоста и двух отражений (эхо местности), уже без высоких частот.
-## Затвор — два металлических щелчка: открыл и дослал.
+## Затвор — отпирание, скольжение, звон гильзы и запирание; перезарядка — отдельный
+## длинный звук (обойма, патроны, затвор).
 ##
 ## Основная энергия — в середине (200–1000 Гц), а не в басу: динамики планшетов и
 ## телефонов почти не воспроизводят частоты ниже ~250 Гц, и выстрел «в басах» на них
@@ -18,6 +19,7 @@ extends SceneTree
 const RATE := 44100
 const SHOT_PATH := "res://assets/audio/rifle_shot.wav"
 const BOLT_PATH := "res://assets/audio/rifle_bolt.wav"
+const RELOAD_PATH := "res://assets/audio/rifle_reload.wav"
 
 var _rng := RandomNumberGenerator.new()
 
@@ -25,8 +27,9 @@ var _rng := RandomNumberGenerator.new()
 func _init() -> void:
 	_rng.seed = 1915  # одинаковый результат при каждом запуске
 	_save(_make_shot(), SHOT_PATH, 0.95)
-	_save(_make_bolt(), BOLT_PATH, 0.6)
-	print("Звуки записаны: %s, %s" % [SHOT_PATH, BOLT_PATH])
+	_save(_make_bolt(), BOLT_PATH, 0.8)
+	_save(_make_reload(), RELOAD_PATH, 0.8)
+	print("Звуки записаны: %s, %s, %s" % [SHOT_PATH, BOLT_PATH, RELOAD_PATH])
 	quit()
 
 
@@ -60,24 +63,89 @@ func _make_shot() -> PackedFloat32Array:
 	return out
 
 
+## Затвор после выстрела: отпер (щелчок), скольжение назад, гильза вылетает и
+## звенит по земле, скольжение вперёд, заперт (тяжёлый щелчок).
 func _make_bolt() -> PackedFloat32Array:
-	var n := int(RATE * 0.45)
 	var out := PackedFloat32Array()
-	out.resize(n)
-	for click in [[0.0, 2300.0, 0.5], [0.22, 1750.0, 0.8]]:
-		var start := int(RATE * click[0])
-		var length := int(RATE * 0.08)
-		var noise := _highpass(_noise(length), 1500.0)
-		var thunk := _lowpass(_noise(length), 450.0)
-		for j in length:
-			if start + j >= n:
-				break
-			var t := float(j) / RATE
-			var v: float = noise[j] * exp(-t / 0.004)
-			v += sin(TAU * click[1] * t) * exp(-t / 0.012) * 0.35
-			v += thunk[j] * exp(-t / 0.02) * 2.0 * click[2]
-			out[start + j] += v
+	out.resize(int(RATE * 0.62))
+	_clack(out, 0.0, 2300.0, 0.6, 700.0)
+	_scrape(out, 0.02, 0.14, 0.22)
+	_shell_ping(out, 0.12, 3400.0, 0.5)
+	_shell_ping(out, 0.25, 3900.0, 0.28)
+	_shell_ping(out, 0.32, 4300.0, 0.16)
+	_scrape(out, 0.20, 0.10, 0.2)
+	_clack(out, 0.30, 1750.0, 1.0, 550.0)
 	return out
+
+
+## Перезарядка (обойма Foxhole-стиля): затвор открыт, обойма вставлена, патроны
+## вдавлены один за другим, пустая обойма выпала, затвор закрыт. Длина = reload_time.
+func _make_reload() -> PackedFloat32Array:
+	var out := PackedFloat32Array()
+	out.resize(int(RATE * 2.5))
+	# Затвор открыт.
+	_clack(out, 0.10, 2300.0, 0.6, 700.0)
+	_scrape(out, 0.12, 0.14, 0.22)
+	# Обойма встаёт в пазы.
+	_clack(out, 0.60, 1200.0, 0.9, 500.0)
+	_scrape(out, 0.66, 0.08, 0.15)
+	# Пять патронов вдавливаются большим пальцем: чуть разные щелчки.
+	for k in 5:
+		_clack(out, 1.00 + k * 0.115, 3000.0 - k * 120.0, 0.38, 900.0 - k * 40.0)
+	# Пустая обойма выскакивает и звенит.
+	_shell_ping(out, 1.68, 4100.0, 0.5)
+	_shell_ping(out, 1.80, 4700.0, 0.22)
+	# Затвор вперёд и запирается.
+	_scrape(out, 1.95, 0.14, 0.24)
+	_clack(out, 2.10, 1750.0, 1.0, 550.0)
+	_clack(out, 2.22, 1400.0, 0.7, 450.0)
+	return out
+
+
+## Металлический щелчок: шум выше 1,5 кГц, короткий тон, «тело» в середине (400–1000 Гц,
+## чтобы слышно было на динамиках планшетов) и глухой удар.
+func _clack(out: PackedFloat32Array, at: float, tone: float, gain: float, body_hz: float) -> void:
+	var start := int(RATE * at)
+	var length := int(RATE * 0.09)
+	var hiss := _highpass(_noise(length), 1500.0)
+	var body := _highpass(_lowpass(_noise(length), body_hz * 1.6), body_hz * 0.5)
+	var thunk := _lowpass(_noise(length), 450.0)
+	for j in length:
+		if start + j >= out.size():
+			break
+		var t := float(j) / RATE
+		var v: float = hiss[j] * exp(-t / 0.004)
+		v += sin(TAU * tone * t) * exp(-t / 0.012) * 0.35
+		v += body[j] * exp(-t / 0.014) * 3.0
+		v += thunk[j] * exp(-t / 0.02) * 1.4
+		out[start + j] += v * gain
+
+
+## Скольжение металла по металлу: полосовой шум с дрожанием, огибающая «горбом».
+func _scrape(out: PackedFloat32Array, at: float, duration: float, gain: float) -> void:
+	var start := int(RATE * at)
+	var length := int(RATE * duration)
+	var grit := _lowpass(_highpass(_noise(length), 900.0), 3500.0)
+	for j in length:
+		if start + j >= out.size():
+			break
+		var t := float(j) / RATE
+		var env := sin(PI * float(j) / length)
+		var ripple := 0.6 + 0.4 * sin(TAU * 55.0 * t)
+		out[start + j] += grit[j] * env * ripple * gain * 2.0
+
+
+## Звон гильзы или пустой обоймы о землю: тон и неточный обертон, быстрое затухание.
+func _shell_ping(out: PackedFloat32Array, at: float, freq: float, gain: float) -> void:
+	var start := int(RATE * at)
+	var length := int(RATE * 0.12)
+	for j in length:
+		if start + j >= out.size():
+			break
+		var t := float(j) / RATE
+		var v := sin(TAU * freq * t) * exp(-t / 0.03)
+		v += sin(TAU * freq * 2.76 * t) * exp(-t / 0.015) * 0.4
+		out[start + j] += v * gain * 0.5
 
 
 func _noise(n: int) -> PackedFloat32Array:

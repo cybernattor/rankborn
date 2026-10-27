@@ -213,6 +213,13 @@ func _check_shots(world: Node3D, player: CharacterBody3D, rifle: Node3D) -> void
 	await create_timer(rifle.BOLT_SOUND_DELAY + 0.1).timeout
 	_check(world.get_children().any(func(n): return n is AudioStreamPlayer3D and n.stream.resource_path.ends_with("rifle_bolt.wav")),
 			"Нет звука затвора")
+	rifle.current_ammo = 0
+	rifle.reload()
+	_check(world.get_children().any(func(n): return n is AudioStreamPlayer3D and n.stream.resource_path.ends_with("rifle_reload.wav")),
+			"Нет звука перезарядки")
+	rifle.reload_timer.stop()
+	rifle.is_reloading = false
+	rifle.current_ammo = rifle.magazine_size
 	player.set_process(true)
 	await process_frame
 	await process_frame
