@@ -19,6 +19,8 @@ const BLOOM_DECAY_SPEED := 0.5
 const MAX_BLOOM := 0.06
 ## Дальность выстрела, м.
 const RANGE := 80.0
+## Запас за точкой прицела, м: цель, стоящая ровно под прицелом, поражается целиком.
+const AIM_HIT_MARGIN := 0.3
 
 # Выше скорости ходьбы (PlayerState.SPEED): бег появится вместе со спринтом.
 const SPEED_RUN_THRESHOLD := PlayerState.SPEED + 0.5
@@ -111,8 +113,19 @@ func shoot() -> void:
 
 	# Трассер
 	var muzzle_pos := muzzle_flash.global_position
-	var hit_pos := raycast.get_collision_point() if raycast.is_colliding() else raycast.to_global(raycast.target_position)
+	var hit_pos: Vector3
+	var landed := false
+	if raycast.is_colliding():
+		hit_pos = raycast.get_collision_point()
+	else:
+		# Долетела до точки прицела, ничего не задев: ложится на землю под ней.
+		hit_pos = raycast.to_global(raycast.target_position)
+		if player:
+			hit_pos.y = player.ground_height_at(hit_pos)
+			landed = true
 	_spawn_tracer.rpc(muzzle_pos, hit_pos)
+	if landed:
+		_spawn_impact.rpc(hit_pos, Vector3.UP)
 
 	# Hitscan-попадание
 	if raycast.is_colliding():
@@ -172,7 +185,9 @@ func _apply_bullet_spread() -> void:
 	if side.length_squared() > 0.0:
 		direction = direction.rotated(side, randf_range(-spread, spread) / 3.0)
 	raycast.global_transform = Transform3D(Basis.IDENTITY, origin)
-	raycast.target_position = direction * RANGE
+	# Пуля летит до точки прицела и не дальше: конус на земле и крестик показывают, где она
+	# ляжет. Если ничего не задела, она падает на землю там (см. shoot).
+	raycast.target_position = direction * minf(to_target.length() + AIM_HIT_MARGIN, RANGE)
 	raycast.force_raycast_update()
 
 

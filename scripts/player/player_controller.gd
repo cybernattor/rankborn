@@ -288,14 +288,30 @@ func _update_aim_direction(delta: float) -> void:
 	if not _mouse_aim:
 		return
 	var cursor := get_viewport().get_mouse_position()
-	var shot_origin := get_shot_origin()
-	if cursor.distance_to(camera.unproject_position(shot_origin)) <= MOUSE_AIM_DEADZONE_PX:
+	# Прицел лежит на земле, поэтому и мёртвая зона — вокруг ног солдата на экране.
+	if cursor.distance_to(camera.unproject_position(global_position)) <= MOUSE_AIM_DEADZONE_PX:
 		return
-	var on_plane := camera.screen_to_plane(cursor, shot_origin.y)
+	var on_plane := _cursor_on_ground(cursor)
 	var to_cursor := (on_plane - global_position) * Vector3(1, 0, 1)
 	if to_cursor.length_squared() > 0.000001:
 		_aim_direction = to_cursor.normalized()
 		_aim_distance = maxf(to_cursor.length(), MIN_AIM_DISTANCE)
+
+
+## Точка земли под курсором. Луч камеры пересекается с самим рельефом, а не с плоскостью
+## на высоте груди: иначе на склоне прицел съезжал от курсора на высоту холма.
+## Высота земли зависит от точки — несколько итераций сходятся (склон положе камеры).
+func _cursor_on_ground(cursor: Vector2) -> Vector3:
+	var point := camera.screen_to_plane(cursor, global_position.y)
+	for i in 4:
+		point = camera.screen_to_plane(cursor, ground_height_at(point))
+	return point
+
+
+## Точка на земле под прицелом: там стоят крестик HUD и конец конуса, сюда ложится пуля,
+## если ничего не задела. Сам aim_point на высоте груди — это высота полёта пули.
+func get_aim_ground() -> Vector3:
+	return aim_point - Vector3.UP * SHOT_HEIGHT
 
 
 func _compute_aim_point() -> Vector3:

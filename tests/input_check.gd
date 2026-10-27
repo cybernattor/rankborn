@@ -84,7 +84,7 @@ func _stick(axis: JoyAxis, value: float) -> void:
 
 
 func _player_on_screen() -> Vector2:
-	return player.camera.unproject_position(player.global_position + Vector3.UP * player.SHOT_HEIGHT)
+	return player.camera.unproject_position(player.global_position)
 
 
 ## Персонаж смотрит туда же, куда целится.
@@ -100,7 +100,7 @@ func _check_aim() -> void:
 	_check(_facing().dot(player.get_aim_direction()) > 0.99, "Персонаж не смотрит туда, куда целится")
 	var hud: CanvasLayer = player.get_node("WeaponHUD")
 	await process_frame
-	_check(hud.crosshair.position.distance_to(player.camera.unproject_position(player.aim_point)) < 1.0, "Прицел HUD не в точке прицеливания")
+	_check(hud.crosshair.position.distance_to(player.camera.unproject_position(player.get_aim_ground())) < 1.0, "Прицел HUD не в точке прицеливания")
 	# Курсор выше по экрану — целится в −Z.
 	await _mouse_to(_player_on_screen() + Vector2(0, -200))
 	_check(player.get_aim_direction().dot(Vector3.FORWARD) > 0.95, "Курсор сверху не поворачивает прицел вперёд")

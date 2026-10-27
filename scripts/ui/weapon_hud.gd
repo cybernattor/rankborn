@@ -111,7 +111,7 @@ func _process(delta: float) -> void:
 func _update_crosshair_position() -> void:
 	if not _player or not "aim_point" in _player:
 		return
-	var screen_pos: Vector2 = _player.camera.unproject_position(_player.aim_point)
+	var screen_pos: Vector2 = _player.camera.unproject_position(_player.get_aim_ground())
 	crosshair.position = screen_pos
 	hit_marker.position = screen_pos
 
@@ -155,8 +155,8 @@ func _calculate_spread() -> float:
 		return 0.0
 	# Радиус конуса разброса на дальности прицела, переведённый в пиксели экрана.
 	var camera: Camera3D = _player.camera
-	var aim: Vector3 = _player.aim_point
-	var distance: float = _player.get_shot_origin().distance_to(aim)
+	var aim: Vector3 = _player.get_aim_ground()
+	var distance: float = ((aim - _player.global_position) * Vector3(1, 0, 1)).length()
 	var side: Vector3 = _player.get_aim_direction().cross(Vector3.UP).normalized()
 	var edge := aim + side * distance * tan(weapon.get_spread_angle())
 	var radius := camera.unproject_position(aim).distance_to(camera.unproject_position(edge))

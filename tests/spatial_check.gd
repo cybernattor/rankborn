@@ -43,8 +43,15 @@ func _run() -> void:
 	for i in 60:
 		await process_frame
 	var hud: CanvasLayer = player.get_node("WeaponHUD")
-	var aim_on_screen: Vector2 = player.camera.unproject_position(player.aim_point)
+	var aim_on_screen: Vector2 = player.camera.unproject_position(player.get_aim_ground())
 	_check(hud.crosshair.position.distance_to(aim_on_screen) < 1.0, "Прицел HUD не в точке прицеливания")
+	# Курсор -> точка на рельефе -> обратно на экран: прицел не съезжает от курсора на склонах.
+	var view := player.get_viewport().get_visible_rect().size
+	for frac: Vector2 in [Vector2(0.5, 0.5), Vector2(0.8, 0.3), Vector2(0.2, 0.7)]:
+		var cursor: Vector2 = view * frac
+		var on_ground: Vector3 = player._cursor_on_ground(cursor)
+		_check(on_ground.y > player.ground_height_at(on_ground) - 0.05 and on_ground.y < player.ground_height_at(on_ground) + 0.05, "Курсор не попадает на рельеф")
+		_check(player.camera.unproject_position(on_ground).distance_to(cursor) < 1.0, "Точка под курсором не совпадает с курсором на экране")
 	_check_covers(world)
 	await _check_fog(world, player, remote)
 	for spawn: Marker3D in world.get_node("SpawnPoints").get_children():
@@ -172,6 +179,7 @@ func _check_shots(world: Node3D, player: CharacterBody3D, rifle: Node3D) -> void
 		_check(rifle.raycast.get_collider() == target, "Выстрел не летит в сторону прицела")
 		var shot: Vector3 = rifle.raycast.get_collision_point() - origin
 		_check(shot.angle_to(dir) <= rifle.get_spread_angle() * 1.06 + 0.001, "Выстрел вне конуса разброса")
+		_check(rifle.raycast.target_position.length() <= 10.0 + rifle.AIM_HIT_MARGIN + 0.001, "Пуля летит дальше точки прицела")
 	# Прицеливание как у Foxhole: конус сводится за AIM_TIME, а не сразу; выстрел сбивает сведение.
 	player.is_aiming = false
 	player._update_aim_progress(0.1)

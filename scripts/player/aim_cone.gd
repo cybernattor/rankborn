@@ -38,12 +38,14 @@ func _process(_delta: float) -> void:
 	if not weapon or not weapon.has_method("get_spread_angle"):
 		return
 	var direction: Vector3 = player.get_aim_direction()
-	var origin: Vector3 = player.global_position + direction * START_OFFSET
+	# Края конуса считаем от самого солдата, как летит пуля: на дальности прицела
+	# они ровно там, где пуля ложится на землю при крайнем отклонении.
+	var origin: Vector3 = player.global_position
 	var length: float = maxf(((player.aim_point - origin) * Vector3(1, 0, 1)).length(), 1.0)
 	var spread: float = weapon.get_spread_angle()
 	var left := _on_ground(origin + direction.rotated(Vector3.UP, spread) * length)
 	var right := _on_ground(origin + direction.rotated(Vector3.UP, -spread) * length)
-	var start := _on_ground(origin)
+	var start := _on_ground(origin + direction * START_OFFSET)
 	var edge := EDGE_COLOR.lerp(AIMED_COLOR, player.aim_progress)
 
 	_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
