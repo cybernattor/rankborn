@@ -51,9 +51,13 @@ func _desired_focus() -> Vector3:
 	if "aim_point" in target:
 		var to_aim: Vector3 = (target.aim_point - focus) * Vector3(1, 0, 1)
 		# Камера уходит вперёд по мере сведения прицела, а не скачком.
+		# С мышью от бедра камера стоит на месте, как у Foxhole: иначе это петля —
+		# курсор у солдата → прицел ближе → камера едет → мир под курсором сдвигается →
+		# прицел снова меняется; прицел «застревал», проходя через солдата.
 		var progress: float = target.aim_progress
+		var hip_share := 0.0 if target.uses_mouse_aim() else LOOK_AHEAD
 		var limit := lerpf(LOOK_AHEAD_MAX, LOOK_AHEAD_ADS_MAX, progress)
-		var share := lerpf(LOOK_AHEAD, 1.0, progress)
+		var share := lerpf(hip_share, 1.0, progress)
 		focus += (to_aim * share).limit_length(limit)
 	return focus
 

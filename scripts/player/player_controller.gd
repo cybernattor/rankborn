@@ -63,8 +63,12 @@ const STICK_TURN_SMOOTHING := 14.0
 const STICK_TURN_SPEED := 6.0
 const STICK_TURN_SPEED_ADS := 2.2
 const STICK_DISTANCE_SMOOTHING := 8.0
-## Курсор ближе этого к игроку не меняет направление: иначе персонаж крутится на месте.
-const MIN_MOUSE_AIM_DISTANCE := 1.0
+## Мёртвая зона курсора вокруг солдата — в пикселях экрана, а не в метрах: при 1 м
+## (≈90 px на экране) прицел «застревал» на полсекунды, пока курсор проходил через
+## солдата, и потом прыгал. Несколько пикселей хватает, чтобы он не крутился волчком.
+const MOUSE_AIM_DEADZONE_PX := 6.0
+## Ближе этого точка прицела не подходит: конус и выстрел вырождаются в точку.
+const MIN_AIM_DISTANCE := 0.5
 
 ## Туман войны: хост решил, что этого (удалённого) игрока нам не видно
 ## (VisibilityManager). Не рисуется и не ловит пули — иначе можно стрелять по призраку
@@ -203,6 +207,11 @@ func get_shot_origin() -> Vector3:
 	return global_position + Vector3.UP * (SHOT_HEIGHT * get_body_height() / STAND_HEIGHT)
 
 
+## Целимся мышью (курсором), а не стиком.
+func uses_mouse_aim() -> bool:
+	return _mouse_aim
+
+
 ## Горизонтальное направление прицеливания (единичное).
 func get_aim_direction() -> Vector3:
 	return _aim_direction
@@ -279,11 +288,14 @@ func _update_aim_direction(delta: float) -> void:
 	if not _mouse_aim:
 		return
 	var cursor := get_viewport().get_mouse_position()
-	var on_plane := camera.screen_to_plane(cursor, get_shot_origin().y)
+	var shot_origin := get_shot_origin()
+	if cursor.distance_to(camera.unproject_position(shot_origin)) <= MOUSE_AIM_DEADZONE_PX:
+		return
+	var on_plane := camera.screen_to_plane(cursor, shot_origin.y)
 	var to_cursor := (on_plane - global_position) * Vector3(1, 0, 1)
-	if to_cursor.length() > MIN_MOUSE_AIM_DISTANCE:
+	if to_cursor.length_squared() > 0.000001:
 		_aim_direction = to_cursor.normalized()
-		_aim_distance = to_cursor.length()
+		_aim_distance = maxf(to_cursor.length(), MIN_AIM_DISTANCE)
 
 
 func _compute_aim_point() -> Vector3:
