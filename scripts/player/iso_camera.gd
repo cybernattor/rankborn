@@ -14,9 +14,12 @@ const PITCH_DEG := 55.0
 const DISTANCE := 21.0
 const CAMERA_FOV := 40.0
 ## Сдвиг к точке прицеливания: доля расстояния до неё и предел в метрах.
+## По вертикали камера видит примерно ±8 м от центра: при большем сдвиге в прицеле
+## свой солдат уходил за край экрана (было 13 м). При 6.5 м и дальности прицела
+## стиком 15 м на экране остаются и солдат, и точка прицела.
 const LOOK_AHEAD := 0.35
 const LOOK_AHEAD_MAX := 6.0
-const LOOK_AHEAD_ADS_MAX := 13.0
+const LOOK_AHEAD_ADS_MAX := 6.5
 const FOLLOW_SPEED := 8.0
 
 var target: Node3D
@@ -47,8 +50,10 @@ func _desired_focus() -> Vector3:
 	var focus := target.global_position
 	if "aim_point" in target:
 		var to_aim: Vector3 = (target.aim_point - focus) * Vector3(1, 0, 1)
-		var limit := LOOK_AHEAD_ADS_MAX if target.is_aiming else LOOK_AHEAD_MAX
-		var share := 1.0 if target.is_aiming else LOOK_AHEAD
+		# Камера уходит вперёд по мере сведения прицела, а не скачком.
+		var progress: float = target.aim_progress
+		var limit := lerpf(LOOK_AHEAD_MAX, LOOK_AHEAD_ADS_MAX, progress)
+		var share := lerpf(LOOK_AHEAD, 1.0, progress)
 		focus += (to_aim * share).limit_length(limit)
 	return focus
 

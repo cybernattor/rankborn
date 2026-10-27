@@ -78,10 +78,10 @@ func is_touch_device() -> bool:
 	return force_touch or OS.has_feature("mobile") or OS.has_feature("web_android") or OS.has_feature("web_ios")
 
 
-# На тач-экране удерживать кнопку и одновременно целиться свайпом неудобно,
-# поэтому там прицел и присед всегда переключаются нажатием.
+# На тач-экране прицел держит сам стик прицела (MobileUI), поэтому переключателя там нет;
+# присед на таче всегда переключается нажатием — держать кнопку нечем.
 func uses_aim_toggle() -> bool:
-	return aim_toggle or is_touch_device()
+	return aim_toggle and not is_touch_device()
 
 
 func uses_crouch_toggle() -> bool:

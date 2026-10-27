@@ -172,12 +172,24 @@ func _check_shots(world: Node3D, player: CharacterBody3D, rifle: Node3D) -> void
 		_check(rifle.raycast.get_collider() == target, "Выстрел не летит в сторону прицела")
 		var shot: Vector3 = rifle.raycast.get_collision_point() - origin
 		_check(shot.angle_to(dir) <= rifle.get_spread_angle() * 1.06 + 0.001, "Выстрел вне конуса разброса")
-	# Прицеливание сужает конус.
+	# Прицеливание как у Foxhole: конус сводится за AIM_TIME, а не сразу; выстрел сбивает сведение.
 	player.is_aiming = false
+	player._update_aim_progress(0.1)
 	var hip: float = rifle.get_spread_angle()
 	player.is_aiming = true
-	_check(rifle.get_spread_angle() < hip * 0.5, "Прицеливание не сужает разброс")
+	player._update_aim_progress(player.AIM_TIME * 0.25)
+	var quarter: float = rifle.get_spread_angle()
+	_check(quarter < hip and quarter > hip * 0.5, "Прицел сводится мгновенно, а не постепенно")
+	player._update_aim_progress(player.AIM_TIME)
+	_check(is_equal_approx(player.aim_progress, 1.0) and rifle.get_spread_angle() < hip * 0.25, "Сведённый прицел не сужает разброс")
+	player.on_shot_fired()
+	_check(player.aim_progress < 0.5, "Выстрел не сбивает сведение прицела")
 	player.is_aiming = false
+	player._update_aim_progress(0.1)
+	_check(is_zero_approx(player.aim_progress), "Сведение остаётся после отпускания прицела")
+	# Винтовка как у Foxhole: обойма 5, затвор ~1 с, три попадания на убийство.
+	_check(rifle.magazine_size == 5 and rifle.fire_rate >= 1.0 and ceili(player.health_component.max_health / rifle.damage) == 3,
+			"Винтовка не как у Foxhole")
 	var tip: Vector3 = rifle.rifle_mesh.position + Vector3(0, 0, rifle.rifle_mesh.mesh.get_aabb().position.z)
 	_check(tip.is_equal_approx(rifle.muzzle_flash.position))
 	var outline: MeshInstance3D = rifle.rifle_mesh.get_child(0)
@@ -189,6 +201,23 @@ func _check_shots(world: Node3D, player: CharacterBody3D, rifle: Node3D) -> void
 		if corners.has(outline_vertices[i]):
 			_check(corners[outline_vertices[i]].is_equal_approx(outline_normals[i]), "Обводка разрывается в углах")
 		corners[outline_vertices[i]] = outline_normals[i]
+	# Звук выстрела — в мире у дула (его слышат все, с направлением), затвор — следом;
+	# прогрев эффектов в начале матча беззвучный. Слушатель — у солдата, а не у камеры.
+	var sounds_before := _shot_sounds(world).size()
+	rifle.prewarm_effects(player.global_position + Vector3.FORWARD * 4.0)
+	_check(_shot_sounds(world).size() == sounds_before, "Прогрев эффектов играет звук выстрела")
+	rifle._shoot_effects(rifle.muzzle_flash.global_position)
+	var sounds := _shot_sounds(world)
+	_check(sounds.size() == sounds_before + 1 and sounds.back().global_position.distance_to(rifle.muzzle_flash.global_position) < 0.01,
+			"Выстрел не звучит у дула")
+	await create_timer(rifle.BOLT_SOUND_DELAY + 0.1).timeout
+	_check(world.get_children().any(func(n): return n is AudioStreamPlayer3D and n.stream.resource_path.ends_with("rifle_bolt.wav")),
+			"Нет звука затвора")
+	player.set_process(true)
+	await process_frame
+	await process_frame
+	player.set_process(false)
+	_check(player.ears.is_current() and player.ears.global_position.distance_to(player.global_position) < 2.0, "Слушатель не у солдата")
 	var base: Transform3D = rifle.transform
 	for i in range(3):
 		rifle.can_fire = true
@@ -220,6 +249,10 @@ func _check_shots(world: Node3D, player: CharacterBody3D, rifle: Node3D) -> void
 	_check(world.get_child_count() == children_before, "У жертвы брызги крови появляются перед камерой")
 	_check_hud(player)
 	target.queue_free()
+
+
+func _shot_sounds(world: Node3D) -> Array:
+	return world.get_children().filter(func(n): return n is AudioStreamPlayer3D and n.stream.resource_path.ends_with("rifle_shot.wav"))
 
 
 ## Игроки появляются на земле, а не в воздухе: формула высоты совпадает с
