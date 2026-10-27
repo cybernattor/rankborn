@@ -201,6 +201,23 @@ func _check_shots(world: Node3D, player: CharacterBody3D, rifle: Node3D) -> void
 		if corners.has(outline_vertices[i]):
 			_check(corners[outline_vertices[i]].is_equal_approx(outline_normals[i]), "Обводка разрывается в углах")
 		corners[outline_vertices[i]] = outline_normals[i]
+	# Звук выстрела — в мире у дула (его слышат все, с направлением), затвор — следом;
+	# прогрев эффектов в начале матча беззвучный. Слушатель — у солдата, а не у камеры.
+	var sounds_before := _shot_sounds(world).size()
+	rifle.prewarm_effects(player.global_position + Vector3.FORWARD * 4.0)
+	_check(_shot_sounds(world).size() == sounds_before, "Прогрев эффектов играет звук выстрела")
+	rifle._shoot_effects(rifle.muzzle_flash.global_position)
+	var sounds := _shot_sounds(world)
+	_check(sounds.size() == sounds_before + 1 and sounds.back().global_position.distance_to(rifle.muzzle_flash.global_position) < 0.01,
+			"Выстрел не звучит у дула")
+	await create_timer(rifle.BOLT_SOUND_DELAY + 0.1).timeout
+	_check(world.get_children().any(func(n): return n is AudioStreamPlayer3D and n.stream.resource_path.ends_with("rifle_bolt.wav")),
+			"Нет звука затвора")
+	player.set_process(true)
+	await process_frame
+	await process_frame
+	player.set_process(false)
+	_check(player.ears.is_current() and player.ears.global_position.distance_to(player.global_position) < 2.0, "Слушатель не у солдата")
 	var base: Transform3D = rifle.transform
 	for i in range(3):
 		rifle.can_fire = true
@@ -232,6 +249,10 @@ func _check_shots(world: Node3D, player: CharacterBody3D, rifle: Node3D) -> void
 	_check(world.get_child_count() == children_before, "У жертвы брызги крови появляются перед камерой")
 	_check_hud(player)
 	target.queue_free()
+
+
+func _shot_sounds(world: Node3D) -> Array:
+	return world.get_children().filter(func(n): return n is AudioStreamPlayer3D and n.stream.resource_path.ends_with("rifle_shot.wav"))
 
 
 ## Игроки появляются на земле, а не в воздухе: формула высоты совпадает с

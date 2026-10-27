@@ -26,6 +26,8 @@ var input_blocked: bool = false
 ## HUD и экран смерти есть только у локального игрока.
 var weapon_hud: CanvasLayer
 var death_screen: DeathScreen
+var ears: AudioListener3D
+const EARS_HEIGHT := 1.6
 
 # Прицеливание как у Foxhole: зума нет. Пока прицел зажат, конус разброса
 # сужается за AIM_TIME (aim_progress 0 → 1, Rifle.get_spread_angle), камера уходит
@@ -111,6 +113,13 @@ func _ready() -> void:
 		death_screen = DeathScreen.new()
 		death_screen.name = "DeathScreen"
 		add_child(death_screen)
+		# «Уши» у солдата: камера висит в 20 м над ним, и от неё всё звучало бы
+		# тихо и одинаково. Ориентация — как у камеры, чтобы лево/право совпадали с экраном.
+		ears = AudioListener3D.new()
+		ears.name = "Ears"
+		ears.top_level = true
+		add_child(ears)
+		ears.make_current()
 		var aim_cone := AimCone.new()
 		aim_cone.name = "AimCone"
 		aim_cone.player = self
@@ -240,6 +249,7 @@ func _process(delta: float) -> void:
 	head.position.y = lerpf(head.position.y, get_head_height(), 1.0 - exp(-CROUCH_TRANSITION_SPEED * delta))
 	if not is_multiplayer_authority():
 		return
+	ears.global_transform = Transform3D(camera.global_basis, global_position + Vector3.UP * EARS_HEIGHT)
 	_update_aim()
 	_update_aim_progress(delta)
 	if can_control():
