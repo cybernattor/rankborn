@@ -8,7 +8,8 @@ Godot 4.7 multiplayer shooter/strategy game with a top-down camera like Foxhole 
 
 - **Open and run**: Open `project.godot` in Godot Editor → F5
 - **No CLI build**: There is no `npm`, `cargo`, or equivalent. All compilation is Godot-side.
-- **Export**: Windows x86_64 and Android presets in `export_presets.cfg`; output goes to `export/` (git-ignored)
+- **Export**: Windows x86_64 and Android presets in `export_presets.cfg`; output goes to `export/` (git-ignored). `tools/export.sh` builds the Android release APK and the Windows debug build (`GODOT=/path/to/godot tools/export.sh` if Godot is not in PATH); it needs the export templates and a real Android SDK set in the editor settings (`export/android/android_sdk_path`) — Godot signs the APK itself via `apksigner`.
+- **Signing**: every build is signed with the project's debug key `tools/debug.keystore` (alias `androiddebugkey`, password `android`), passed via `GODOT_ANDROID_KEYSTORE_{DEBUG,RELEASE}_*` env vars, so a new APK installs over the previous one. It is a test key, not a secret; `tools/` is excluded from exports. A Google Play release key must never be committed
 
 ## Network testing (critical)
 
