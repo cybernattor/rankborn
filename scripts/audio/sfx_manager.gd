@@ -15,6 +15,10 @@ var _bolt: AudioStream
 var _reload: AudioStream
 var _empty: AudioStream
 var _step: AudioStream
+var _hit_flesh: AudioStream
+var _hit_dirt: AudioStream
+var _hit_hard: AudioStream
+var _whiz: AudioStream
 
 
 func _ready() -> void:
@@ -23,6 +27,10 @@ func _ready() -> void:
 	_reload = load("res://assets/audio/rifle_reload.wav")
 	_empty = load("res://assets/audio/empty.wav")
 	_step = load("res://assets/audio/step.wav")
+	_hit_flesh = load("res://assets/audio/hit_flesh.wav")
+	_hit_dirt = load("res://assets/audio/hit_dirt.wav")
+	_hit_hard = load("res://assets/audio/hit_hard.wav")
+	_whiz = load("res://assets/audio/bullet_whiz.wav")
 
 
 func _play(stream: AudioStream, volume_db: float = 0.0) -> void:
@@ -72,6 +80,24 @@ func play_reload_at(position: Vector3, follow: Node3D = null) -> void:
 ## Шаг: свои — тише, чужие — громче (по ним слышно, что кто-то рядом).
 func play_step_at(position: Vector3, own: bool) -> void:
 	_play_at(_step, position, -12.0 if own else -3.0)
+
+
+## Пуля попала в тело: слышат все рядом (стрелок и жертва тоже — это подтверждение попадания).
+func play_hit_flesh_at(position: Vector3) -> void:
+	_play_at(_hit_flesh, position, -2.0)
+
+
+## Пуля в землю (ground) или в твёрдое — камень, стену, мешок.
+func play_impact_at(position: Vector3, ground: bool) -> void:
+	if ground:
+		_play_at(_hit_dirt, position, -5.0)
+	else:
+		_play_at(_hit_hard, position, -3.0)
+
+
+## Пуля пролетела рядом со слушателем.
+func play_whiz_at(position: Vector3) -> void:
+	_play_at(_whiz, position, -2.0)
 
 
 func play_empty() -> void:

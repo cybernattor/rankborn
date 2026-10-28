@@ -48,6 +48,11 @@ static var _tracer_material: StandardMaterial3D
 const PREWARM_MARK_LIFETIME := 0.2
 ## Через сколько после выстрела слышен затвор (меньше fire_rate).
 const BOLT_SOUND_DELAY := 0.45
+## Свист: пуля, прошедшая ближе WHIZ_RADIUS метров к голове слушателя. Если трасса
+## кончается ближе WHIZ_HIT_EXCLUDE к нему — пуля попала в него, свиста нет.
+const WHIZ_RADIUS := 4.0
+const WHIZ_EAR_HEIGHT := 1.5
+const WHIZ_HIT_EXCLUDE := 1.2
 
 
 func _ready() -> void:
@@ -285,10 +290,10 @@ func _sound_anchor() -> Node3D:
 ## первое попадание и первая кровь давали заметный рывок кадра, особенно на телефонах.
 func prewarm_effects(at: Vector3) -> void:
 	_shoot_effects(muzzle_flash.global_position, false)
-	_spawn_impact(at, Vector3.UP)
-	_spawn_impact(at + Vector3.UP * 0.5, Vector3.BACK)
-	_spawn_tracer(muzzle_flash.global_position, at)
-	_spawn_blood(at + Vector3.UP, Vector3.UP)
+	_spawn_impact(at, Vector3.UP, false)
+	_spawn_impact(at + Vector3.UP * 0.5, Vector3.BACK, false)
+	_spawn_tracer(muzzle_flash.global_position, at, false)
+	_spawn_blood(at + Vector3.UP, Vector3.UP, 0, false)
 	# Следы пуль от прогрева убираем, как только они отрисовались.
 	var marks := _scorch_marks.slice(-2)
 	get_tree().create_timer(PREWARM_MARK_LIFETIME).timeout.connect(func():
@@ -300,12 +305,14 @@ func prewarm_effects(at: Vector3) -> void:
 
 
 @rpc("call_local", "unreliable")
-func _spawn_impact(pos: Vector3, normal: Vector3) -> void:
+func _spawn_impact(pos: Vector3, normal: Vector3, with_sound: bool = true) -> void:
 	var root := get_tree().current_scene
 	if not root:
 		return
 
 	var is_ground := normal.y > 0.7
+	if with_sound:
+		SFXManager.play_impact_at(pos, is_ground)
 	var assets := _get_impact_assets(is_ground)
 
 	# --- Искры ---
@@ -402,7 +409,7 @@ func _spawn_impact(pos: Vector3, normal: Vector3) -> void:
 
 
 @rpc("call_local", "unreliable")
-func _spawn_tracer(muzzle_pos: Vector3, hit_pos: Vector3) -> void:
+func _spawn_tracer(muzzle_pos: Vector3, hit_pos: Vector3, with_sound: bool = true) -> void:
 	var root := get_tree().current_scene
 	if not root:
 		return
@@ -410,6 +417,8 @@ func _spawn_tracer(muzzle_pos: Vector3, hit_pos: Vector3) -> void:
 	var length := muzzle_pos.distance_to(hit_pos)
 	if length < 0.1:
 		return
+	if with_sound:
+		_play_whiz(muzzle_pos, hit_pos)
 
 	if not _tracer_material:
 		_tracer_material = StandardMaterial3D.new()
@@ -436,8 +445,24 @@ func _spawn_tracer(muzzle_pos: Vector3, hit_pos: Vector3) -> void:
 	)
 
 
+## Свист пули, пролетевшей рядом с нашим солдатом. Своих выстрелов не свистим, и если
+## пуля попала в нас самих — об этом говорят шлепок и вспышка урона, а не пролёт.
+func _play_whiz(from: Vector3, to: Vector3) -> void:
+	var own := get_tree().current_scene.get_node_or_null("Players/%d" % multiplayer.get_unique_id()) as Node3D
+	if own == null or own == _get_player():
+		return
+	var ear := own.global_position + Vector3.UP * WHIZ_EAR_HEIGHT
+	var closest := Geometry3D.get_closest_point_to_segment(ear, from, to)
+	var distance := closest.distance_to(ear)
+	if distance > WHIZ_RADIUS or to.distance_to(ear) < WHIZ_HIT_EXCLUDE:
+		return
+	SFXManager.play_whiz_at(closest)
+
+
 @rpc("call_local", "unreliable")
-func _spawn_blood(pos: Vector3, normal: Vector3, victim_id: int = 0) -> void:
+func _spawn_blood(pos: Vector3, normal: Vector3, victim_id: int = 0, with_sound: bool = true) -> void:
+	if with_sound:
+		SFXManager.play_hit_flesh_at(pos)
 	# У самой жертвы брызги появлялись в полуметре от камеры и закрывали
 	# экран огромными кубами — о попадании ей сообщает эффект урона на экране.
 	if victim_id == multiplayer.get_unique_id():

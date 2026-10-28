@@ -25,7 +25,7 @@ LAN discovery is broadcast-based (port 7001). Instances on the same machine disc
 **Autoloads** (singletons, always available):
 - `NetworkManager` → ENet P2P, player registry, host/client logic (`scripts/autoload/network_manager.gd`)
 - `LanDiscovery` → UDP broadcast lobby browser (`scripts/autoload/lan_discovery.gd`)
-- `SFXManager` → Audio (`scripts/audio/sfx_manager.gd`): shots and bolt are positional `AudioStreamPlayer3D` in the world; the listener is the local soldier's `Ears` (top_level `AudioListener3D` with the camera's basis), not the camera 20 m above. Sounds are synthesized by `tools/gen_sfx.gd` (`godot --headless --path . --script tools/gen_sfx.gd`), energy in the mids — tablet speakers drop everything below ~250 Hz
+- `SFXManager` → Audio (`scripts/audio/sfx_manager.gd`): shots and bolt are positional `AudioStreamPlayer3D` in the world; the listener is the local soldier's `Ears` (top_level `AudioListener3D` with the camera's basis), not the camera 20 m above. Hits (flesh/dirt/hard), bullet whiz (within 4 m of the listener's head, never your own shots) and reload are positional too. Metal sounds are noise only — a pure sine at 3–5 kHz sounds like a marimba note; `python3 tools/check_tonal.py assets/audio/*.wav` flags pure tones. Sounds are synthesized by `tools/gen_sfx.gd` (`godot --headless --path . --script tools/gen_sfx.gd`), energy in the mids — tablet speakers drop everything below ~250 Hz
 - `GameSettings` → Controls settings and nickname, saved to `user://settings.cfg`; `is_touch_device()` (`scripts/autoload/game_settings.gd`)
 
 **Scene flow**: `main_menu.tscn` → (host or join) → `game_scene.tscn` (spawns players, builds terrain)
