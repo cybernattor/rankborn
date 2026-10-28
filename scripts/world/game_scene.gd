@@ -71,6 +71,12 @@ func _ready() -> void:
 	mobile_ui.pause_pressed.connect(pause_menu.toggle)
 	pause_menu.visibility_changed.connect(_on_pause_visibility_changed)
 	_bind_local_player_ui()
+	var kill_feed := KillFeed.new()
+	kill_feed.name = "KillFeed"
+	add_child(kill_feed)
+	if game_mode.has_signal("killfeed_entry"):
+		game_mode.killfeed_entry.connect(func(killer: String, victim: String, _weapon: String) -> void:
+			kill_feed.add_entry(killer, victim))
 	var visibility := VisibilityManager.new()
 	visibility.name = "VisibilityManager"
 	add_child(visibility)

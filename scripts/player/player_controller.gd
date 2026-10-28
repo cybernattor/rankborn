@@ -140,6 +140,10 @@ func _ready() -> void:
 		death_screen = DeathScreen.new()
 		death_screen.name = "DeathScreen"
 		add_child(death_screen)
+		var damage_hud := DamageHud.new()
+		damage_hud.name = "DamageHud"
+		add_child(damage_hud)
+		damage_hud.setup(self, health_component)
 		# «Уши» у солдата: камера висит в 20 м над ним, и от неё всё звучало бы
 		# тихо и одинаково. Ориентация — как у камеры, чтобы лево/право совпадали с экраном.
 		ears = AudioListener3D.new()

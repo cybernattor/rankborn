@@ -43,12 +43,18 @@ func on_player_die(player_id: int, killer_id: int = -1) -> void:
 		var killer_entry: Dictionary = scores.get(killer_id, { "kills": 0, "deaths": 0, "name": "?" })
 		if killer_entry:
 			killer_entry.kills += 1
-			killfeed_entry.emit(killer_entry.name, entry.get("name", "?"), "Rifle")
-	elif killer_id == player_id:
-		# Самоубийство
-		killfeed_entry.emit("World", entry.get("name", "?"), "")
+			killfeed_entry.emit(_name_of(killer_id), _name_of(player_id), "Rifle")
+	else:
+		# Погиб сам (зона смерти, падение): убийцы нет.
+		killfeed_entry.emit("", _name_of(player_id), "")
 
 	score_updated.emit()
+
+
+## Ник на момент события: имя в scores снимается при спавне, когда у клиента
+## настоящего ника ещё может не быть (он приходит позже, через _register_name).
+func _name_of(player_id: int) -> String:
+	return NetworkManager.players.get(player_id, {}).get("name", NetworkManager.sanitize_name("", player_id))
 
 
 func get_score(player_id: int) -> Dictionary:

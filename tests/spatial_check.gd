@@ -90,6 +90,16 @@ func _run() -> void:
 	remote.global_position = Vector3(30, 20, 30)
 	await _check_shots(world, player, rifle)
 	player.set_process(true)  # камера смерти живёт в _process
+	# Обратная связь урона: полоска здоровья, дуга в сторону стрелка (remote стоит в +x +z).
+	var damage_hud: DamageHud = player.get_node("DamageHud")
+	player.health_component.take_damage(30.0, 7)
+	await process_frame
+	_check(is_equal_approx(damage_hud._bar_fill.size.x, (DamageHud.BAR_SIZE.x - 4.0) * 0.7), "Полоска здоровья не отражает урон")
+	_check(damage_hud._arcs.size() == 1 and damage_hud._arcs[0].dir.x > 0.5 and damage_hud._arcs[0].dir.z > 0.5, "Нет дуги в сторону стрелка")
+	_check(damage_hud._flash.modulate.a > 0.0, "Нет вспышки при уроне")
+	player.health_component.take_damage(5.0)  # без стрелка (зона смерти): вспышка есть, дуги нет
+	await process_frame
+	_check(damage_hud._arcs.size() == 1, "Дуга появилась без стрелка")
 	player.health_component.take_damage(9999.0, 7)
 	await process_frame
 	_check(not player.visible and player.get_node("CollisionShape3D").disabled)
@@ -98,6 +108,8 @@ func _run() -> void:
 	_check(not player.weapon_hud.visible, "HUD оружия виден после смерти")
 	await create_timer(1.0).timeout
 	_check(world.game_mode.get_score(1).deaths == 1)
+	var feed: KillFeed = world.get_node("KillFeed")
+	_check(feed._list.get_child_count() == 1 and "Remote" in feed._list.get_child(0).text and "Host" in feed._list.get_child(0).text, "Килфид не показал убийство")
 	# Перед смертью смотрим вбок — после респавна взгляд должен вернуться к центру карты.
 	player.rotation.y = PI * 0.5
 	player._aim_direction = Vector3.RIGHT
