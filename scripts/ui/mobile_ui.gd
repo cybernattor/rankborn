@@ -93,6 +93,12 @@ func _notification(what: int) -> void:
 		_release_all()
 
 
+# Выход из матча (меню, смена сцены) освобождает нажатые действия: Input.action_press живёт
+# в синглтоне и без этого перешёл бы в следующий матч (идёшь/стреляешь сам по себе).
+func _exit_tree() -> void:
+	_release_all()
+
+
 func _layout() -> void:
 	var w := size.x
 	var h := size.y
