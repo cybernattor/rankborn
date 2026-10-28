@@ -28,9 +28,18 @@ var _hit_marker_tween: Tween
 
 ## На тач-экране патроны — сверху по центру: справа внизу стик прицела и кнопки.
 const TOUCH_AMMO_MARGIN_TOP := 12.0
-## Счётчик кадров в отладочных сборках — чтобы тестеры могли назвать цифры.
+## Счётчик кадров (настройка «Показывать FPS»): FPS, пресет графики, рендерер и разрешение
+## 3D — чтобы тестеры называли цифры вместе с условиями, а не просто «40».
 var _fps_label: Label
+const RENDERER_NAMES := {"mobile": "Vulkan Mobile", "forward_plus": "Vulkan Forward+", "gl_compatibility": "OpenGL (Compatibility)"}
 var _touch_layout: bool = false
+## Туман войны: видит ли нас кто-нибудь (VisibilityManager.is_seen). Без этого игрок не
+## понимал, спрятался он за укрытием или нет («противник видит тебя сверху»).
+var _seen_label: Label
+const SEEN_TEXT := "ТЕБЯ ВИДЯТ"
+const HIDDEN_TEXT := "СКРЫТ"
+const SEEN_COLOR := Color(1.0, 0.45, 0.35)
+const HIDDEN_COLOR := Color(0.55, 0.95, 0.55)
 
 
 func _ready() -> void:
@@ -43,13 +52,19 @@ func _ready() -> void:
 	# (камера сверху): позицию задаём сами, от левого верхнего угла.
 	for marker: Control in [crosshair, hit_marker]:
 		marker.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	if OS.is_debug_build():
-		_fps_label = Label.new()
-		_fps_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		_fps_label.position = Vector2(16, 12)
-		_fps_label.add_theme_color_override("font_outline_color", Color.BLACK)
-		_fps_label.add_theme_constant_override("outline_size", 4)
-		$UILayer.add_child(_fps_label)
+	_fps_label = Label.new()
+	_fps_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_fps_label.position = Vector2(16, 12)
+	_fps_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	_fps_label.add_theme_constant_override("outline_size", 4)
+	$UILayer.add_child(_fps_label)
+	_seen_label = Label.new()
+	_seen_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_seen_label.position = Vector2(16, 40)
+	_seen_label.add_theme_font_size_override("font_size", 20)
+	_seen_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	_seen_label.add_theme_constant_override("outline_size", 5)
+	$UILayer.add_child(_seen_label)
 
 
 func setup(weapon_mgr: WeaponManager) -> void:
@@ -88,8 +103,10 @@ func _get_weapon() -> WeaponBase:
 
 func _process(delta: float) -> void:
 	_update_touch_layout()
-	if _fps_label:
-		_fps_label.text = "FPS %d" % Engine.get_frames_per_second()
+	_update_seen_label()
+	_fps_label.visible = GameSettings.show_fps
+	if _fps_label.visible:
+		_fps_label.text = _fps_text()
 	var weapon := _get_weapon()
 	if not weapon:
 		return
@@ -235,3 +252,26 @@ func _find_player() -> Node3D:
 			return node
 		node = node.get_parent()
 	return null
+
+
+func _fps_text() -> String:
+	var quality: String = GameSettings.QUALITY_NAMES[GameSettings.get_quality()]
+	if GameSettings.is_auto_quality():
+		quality += " (авто)"
+	var method := RenderingServer.get_current_rendering_method()
+	var vp := get_viewport()
+	var render_size := Vector2(vp.size) * vp.scaling_3d_scale
+	return "FPS %d · %s · %s · %d×%d%s" % [Engine.get_frames_per_second(), quality,
+			RENDERER_NAMES.get(method, method), render_size.x, render_size.y,
+			" · debug" if OS.is_debug_build() else ""]
+
+
+func _update_seen_label() -> void:
+	var scene := get_tree().current_scene
+	var manager: Node = scene.get_node_or_null("VisibilityManager") if scene else null
+	_seen_label.visible = manager != null
+	if not manager:
+		return
+	var seen: bool = manager.is_seen
+	_seen_label.text = SEEN_TEXT if seen else HIDDEN_TEXT
+	_seen_label.add_theme_color_override("font_color", SEEN_COLOR if seen else HIDDEN_COLOR)

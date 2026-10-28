@@ -14,7 +14,8 @@ extends Control
 ##   геймпада), отпустил — выстрел. Вернул палец в центр (внутреннее кольцо) и отпустил —
 ##   выстрела нет. Целиться и стрелять — два разных решения, как ПКМ и ЛКМ у Foxhole:
 ##   раньше стик стрелял при сильном отклонении, и точно навестись, не выстрелив, было нельзя;
-## - над стиком прицела — ряд DUCK, R, JUMP;
+## - над стиком прицела — ряд DUCK, R, VAULT (перелезть через низкое укрытие; тусклая,
+##   когда перелезать не через что);
 ## - FIRE слева — стрельба без смены направления (стоя на месте, второй рукой).
 ##
 ## Каждый палец отслеживается по event.index, поэтому мультитач работает полностью.
@@ -44,7 +45,7 @@ const SHOT_MAX_WAIT := 1.3
 const ROW_BUTTON_RADIUS := 42.0
 const ROW_SPACING := 104.0
 const ROW_BUTTONS := [
-	{"name": "jump", "label": "JUMP", "action": "jump"},
+	{"name": "vault", "label": "VAULT", "action": "vault"},
 	{"name": "reload", "label": "R", "action": "reload"},
 	{"name": "crouch", "label": "DUCK", "action": "crouch"},
 ]
@@ -332,9 +333,11 @@ func _draw() -> void:
 	# Кнопки
 	for name in _buttons:
 		var b: Dictionary = _buttons[name]
-		draw_circle(b.center, b.radius, COLOR_FILL_ACTIVE if _is_button_lit(name) else COLOR_FILL)
-		draw_arc(b.center, b.radius, 0.0, TAU, 40, COLOR_RING, 2.0, true)
+		var dim: bool = name == "vault" and player != null and not player.vault_available
+		var tint := Color(1, 1, 1, 0.35) if dim else Color.WHITE
+		draw_circle(b.center, b.radius, (COLOR_FILL_ACTIVE if _is_button_lit(name) else COLOR_FILL) * tint)
+		draw_arc(b.center, b.radius, 0.0, TAU, 40, COLOR_RING * tint, 2.0, true)
 		var font_size := 18 if b.radius < 45.0 else 22
 		var text_size := font.get_string_size(b.label, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size)
 		draw_string(font, b.center + Vector2(-text_size.x * 0.5, text_size.y * 0.3), b.label,
-				HORIZONTAL_ALIGNMENT_CENTER, -1, font_size, COLOR_TEXT)
+				HORIZONTAL_ALIGNMENT_CENTER, -1, font_size, COLOR_TEXT * tint)

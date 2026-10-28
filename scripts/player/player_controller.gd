@@ -43,6 +43,12 @@ const AIM_MOVING_SPEED := 1.0
 const AIM_SHOT_KEEP := 0.35
 ## Точка, куда целится игрок (мир): на высоте выстрела над землёй под прицелом.
 var aim_point: Vector3 = Vector3.ZERO
+## Куда прицел реально «достаёт»: aim_point, обрезанный первым укрытием или склоном на
+## пути выстрела. По нему рисуются прицел HUD и конус — раньше они проходили сквозь
+## стены и показывали точку, в которую пуля попасть не могла.
+var sight_point: Vector3 = Vector3.ZERO
+## Слой мира (земля и укрытия) — то, что останавливает пулю, кроме игроков.
+const SIGHT_BLOCKING_MASK := 1
 var _aim_direction := Vector3.FORWARD
 var _aim_distance: float = STICK_AIM_DISTANCE
 ## Последним прицеливались мышью (иначе — стиком). Переключается тем, чем пошевелили.
@@ -59,9 +65,10 @@ const STICK_AIM_DEADZONE := 0.2
 ## Поворот прицела стиком — плавный и с пределом скорости: мгновенный поворот за стиком
 ## дёргал прицел от дрожи пальца и был слишком быстрым. В прицеле — медленнее и точнее.
 ## Мышь точна сама по себе, её не сглаживаем.
-const STICK_TURN_SMOOTHING := 14.0
-const STICK_TURN_SPEED := 6.0
-const STICK_TURN_SPEED_ADS := 2.2
+## Первый вариант (6 и 2.2 рад/с) на плейтесте показался слишком медленным.
+const STICK_TURN_SMOOTHING := 20.0
+const STICK_TURN_SPEED := 11.0
+const STICK_TURN_SPEED_ADS := 4.5
 const STICK_DISTANCE_SMOOTHING := 8.0
 ## Мёртвая зона курсора вокруг солдата — в пикселях экрана, а не в метрах: при 1 м
 ## (≈90 px на экране) прицел «застревал» на полсекунды, пока курсор проходил через
@@ -87,6 +94,22 @@ const CROUCH_HEIGHT := 1.2
 const STAND_HEAD_Y := 1.6
 const CROUCH_HEAD_Y := 1.05
 const CROUCH_TRANSITION_SPEED := 10.0
+
+## Перелезание через низкое укрытие (VaultState, Foxhole: пробел). Мешки с песком
+## перелезаются, стены (2.2 м над любой точкой под ними) — нет. Предел — от земли под
+## ногами: высота укрытий отсчитывается от верхнего угла, и на склоне мешки местами
+## выше своих 1.25 м (до ~1.55).
+var is_vaulting: bool = false
+## Перед солдатом есть через что перелезть — для подсветки кнопки VAULT на таче.
+var vault_available: bool = false
+const VAULT_MAX_HEIGHT := 1.7
+const VAULT_MIN_HEIGHT := 0.3
+## Как далеко перед собой ищем укрытие и какой толщины оно может быть.
+const VAULT_REACH := 1.1
+const VAULT_MAX_DEPTH := 1.2
+const VAULT_PROBE_HEIGHT := 0.5
+## Отступ места приземления от дальней стороны укрытия (радиус капсулы + запас).
+const VAULT_LANDING_GAP := 0.6
 
 ## Синхронизируется по сети (SceneReplicationConfig в player.tscn).
 var is_crouching: bool = false:
@@ -182,6 +205,7 @@ func face_map_center() -> void:
 		rotation.y = atan2(-_aim_direction.x, -_aim_direction.z)
 	_aim_distance = STICK_AIM_DISTANCE
 	aim_point = _compute_aim_point()
+	sight_point = _compute_sight_point()
 	head.position.y = get_head_height()
 	if is_node_ready() and camera.current:
 		camera.snap()
@@ -265,6 +289,8 @@ func _process(delta: float) -> void:
 		_update_aim_direction(delta)
 		rotation.y = atan2(-_aim_direction.x, -_aim_direction.z)
 	aim_point = _compute_aim_point()
+	sight_point = _compute_sight_point()
+	vault_available = can_control() and not is_vaulting and not find_vault(_vault_direction()).is_empty()
 
 
 ## Направление прицеливания: правый стик (геймпад; на таче его нажимает MobileUI)
@@ -309,9 +335,72 @@ func _cursor_on_ground(cursor: Vector2) -> Vector3:
 
 
 ## Точка на земле под прицелом: там стоят крестик HUD и конец конуса, сюда ложится пуля,
-## если ничего не задела. Сам aim_point на высоте груди — это высота полёта пули.
+## если ничего не задела. Считается от sight_point, то есть останавливается у укрытия.
+## Сам aim_point на высоте груди — это высота полёта пули.
 func get_aim_ground() -> Vector3:
-	return aim_point - Vector3.UP * SHOT_HEIGHT
+	return Vector3(sight_point.x, ground_height_at(sight_point), sight_point.z)
+
+
+func _vault_direction() -> Vector3:
+	var move := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+	return Vector3(move.x, 0, move.y) if move.length() > 0.1 else _aim_direction
+
+
+## Маршрут перелезания в сторону direction: {"landing": точка за укрытием, "top": высота
+## его верха} или пусто, если перелезать не через что (нет укрытия, оно выше человека,
+## слишком толстое или за ним некуда встать).
+func find_vault(direction: Vector3) -> Dictionary:
+	var dir := (direction * Vector3(1, 0, 1)).normalized()
+	if dir == Vector3.ZERO or not is_on_floor() or not is_inside_tree():
+		return {}
+	var space := get_world_3d().direct_space_state
+	var feet := global_position
+	var ray := func(from: Vector3, to: Vector3) -> Dictionary:
+		return space.intersect_ray(PhysicsRayQueryParameters3D.create(from, to, SIGHT_BLOCKING_MASK, [get_rid()]))
+	# Укрытие на уровне колен прямо перед собой.
+	var knee := feet + Vector3.UP * VAULT_PROBE_HEIGHT
+	var face: Dictionary = ray.call(knee, knee + dir * VAULT_REACH)
+	if face.is_empty() or face.normal.y > 0.7:
+		return {}  # ничего нет или это пологий склон, а не укрытие
+	# Над ним на высоте выше человека должно быть свободно — иначе это стена.
+	var high := feet + Vector3.UP * (VAULT_MAX_HEIGHT + 0.1)
+	if not ray.call(high, high + dir * (VAULT_REACH + VAULT_MAX_DEPTH)).is_empty():
+		return {}
+	# Верх укрытия.
+	var above: Vector3 = face.position + dir * 0.15
+	var top: Dictionary = ray.call(Vector3(above.x, high.y, above.z), Vector3(above.x, feet.y, above.z))
+	if top.is_empty():
+		return {}
+	var height: float = top.position.y - feet.y
+	if height < VAULT_MIN_HEIGHT or height > VAULT_MAX_HEIGHT:
+		return {}
+	# Дальняя сторона: луч навстречу с той стороны. Если он начинается внутри укрытия
+	# (толще VAULT_MAX_DEPTH), попадания не будет — перелезать некуда.
+	var probe_y: float = knee.y
+	var far_start: Vector3 = face.position + dir * (VAULT_MAX_DEPTH + VAULT_LANDING_GAP)
+	far_start.y = probe_y
+	var back: Dictionary = ray.call(far_start, Vector3(face.position.x, probe_y, face.position.z))
+	if back.is_empty():
+		return {}
+	var landing: Vector3 = back.position + dir * VAULT_LANDING_GAP
+	landing.y = ground_height_at(landing) + 0.05
+	# Место приземления свободно.
+	var shape := PhysicsShapeQueryParameters3D.new()
+	shape.shape = collision_shape.shape
+	shape.transform = Transform3D(Basis.IDENTITY, landing + Vector3.UP * (get_body_height() * 0.5 + 0.05))
+	shape.collision_mask = collision_mask
+	shape.exclude = [get_rid()]
+	if not space.intersect_shape(shape, 1).is_empty():
+		return {}
+	return {"landing": landing, "top": top.position.y}
+
+
+func _compute_sight_point() -> Vector3:
+	if not is_inside_tree():
+		return aim_point
+	var query := PhysicsRayQueryParameters3D.create(get_shot_origin(), aim_point, SIGHT_BLOCKING_MASK, [get_rid()])
+	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	return hit.position if not hit.is_empty() else aim_point
 
 
 func _compute_aim_point() -> Vector3:
@@ -370,17 +459,6 @@ func _update_crouch() -> void:
 		is_crouching = true
 	elif is_crouching and _can_stand_up():
 		is_crouching = false
-
-
-## Прыжок из приседа сначала поднимает игрока (если есть место).
-func stand_up() -> bool:
-	if not is_crouching:
-		return true
-	if not _can_stand_up():
-		return false
-	_crouch_toggled = false
-	is_crouching = false
-	return true
 
 
 func _can_stand_up() -> bool:

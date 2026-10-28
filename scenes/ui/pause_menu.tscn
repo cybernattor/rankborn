@@ -65,6 +65,11 @@ text = "Графика"
 unique_name_in_owner = true
 layout_mode = 2
 
+[node name="ShowFpsCheck" type="CheckBox" parent="VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Показывать FPS"
+
 [node name="ExitSpacer" type="Control" parent="VBoxContainer"]
 custom_minimum_size = Vector2(0, 48)
 layout_mode = 2

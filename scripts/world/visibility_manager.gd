@@ -14,7 +14,14 @@ extends Node
 ## Сам хост видит всех — это предел P2P, его снимет dedicated server (roadmap, фаза 5).
 ##
 ## Видимость симметрична (нет конуса обзора): один список отвечает и на «кого вижу я»,
-## и на «кто видит меня».
+## и на «кто видит меня». Пир сообщает о ней сигналом seen_changed (индикатор в HUD).
+##
+## Шаги тоже решает хост: он знает позиции всех, в том числе скрытых туманом, и шлёт
+## «шаг здесь» каждому, кто в радиусе слышимости — из-за стены слышно, что кто-то идёт.
+## Пригнувшись или с прицелом (медленнее QUIET_SPEED) идут бесшумно — ради этого и
+## нужен присед.
+
+signal seen_changed(seen: bool)
 
 ## Дальность обзора, м. Камера сверху показывает примерно ±20 м — дальше видно в прицеле.
 const VIEW_RANGE := 32.0
@@ -27,6 +34,20 @@ const EYE_SHARE := 0.85
 const TARGET_SHARES := [0.85, 0.5]
 ## Слой мира: земля и укрытия. Игроки (слой 2) взгляд не перекрывают.
 const BLOCKING_MASK := 1
+## Шаги: слышно в этом радиусе; тише этой скорости (присед 2.5, прицел 2.2 м/с) — беззвучно.
+const HEARING_RANGE := 22.0
+const QUIET_SPEED := 3.0
+const STEP_LENGTH := 1.6
+## Скорость сглаживается: позиции приходят по сети пачками, по одному кадру она скачет.
+const SPEED_SMOOTHING_TIME := 0.2
+## Перенос дальше этого за кадр (респавн) — не шаги.
+const TELEPORT_DISTANCE := 3.0
+
+## Видит ли кто-нибудь нашего игрока (последний список от хоста).
+var is_seen: bool = false
+var _last_position: Dictionary = {}  # id → Vector3
+var _speed: Dictionary = {}  # id → м/с, сглаженная
+var _step_left: Dictionary = {}  # id → м до следующего шага
 
 var _update_left: float = 0.0
 var _resend_left: float = 0.0
@@ -38,6 +59,7 @@ var _last_sent: Dictionary = {}  # peer id → Array[int]
 func _physics_process(delta: float) -> void:
 	if not multiplayer.is_server():
 		return
+	_update_steps(delta)
 	_update_left -= delta
 	_resend_left -= delta
 	if _update_left > 0.0:
@@ -95,9 +117,52 @@ func _has_line_of_sight(from: Node3D, to: Node3D) -> bool:
 	return false
 
 
+func _update_steps(delta: float) -> void:
+	for p: Node3D in players_node.get_children():
+		var id := int(str(p.name))
+		var pos := p.global_position
+		var last: Vector3 = _last_position.get(id, pos)
+		_last_position[id] = pos
+		var moved := ((pos - last) * Vector3(1, 0, 1)).length()
+		if moved > TELEPORT_DISTANCE or not p.health_component.is_alive:
+			_speed[id] = 0.0
+			continue
+		var speed := lerpf(_speed.get(id, 0.0), moved / delta, 1.0 - exp(-delta / SPEED_SMOOTHING_TIME))
+		_speed[id] = speed
+		if speed < QUIET_SPEED:
+			continue
+		var left: float = _step_left.get(id, STEP_LENGTH * 0.5) - moved
+		if left <= 0.0:
+			left += STEP_LENGTH
+			_send_step(id, pos)
+		_step_left[id] = left
+
+
+func _send_step(walker_id: int, pos: Vector3) -> void:
+	var my_id := multiplayer.get_unique_id()
+	for p: Node3D in players_node.get_children():
+		var listener_id := int(str(p.name))
+		if (p.global_position - pos).length() > HEARING_RANGE:
+			continue
+		if listener_id == my_id:
+			play_step(pos, walker_id == my_id)
+		elif listener_id in multiplayer.get_peers():
+			play_step.rpc_id(listener_id, pos, walker_id == listener_id)
+
+
+## Хост → пир: шаг в этой точке (own — свой, тише).
+@rpc("authority", "unreliable")
+func play_step(pos: Vector3, own: bool) -> void:
+	SFXManager.play_step_at(pos, own)
+
+
 ## Хост → пир: кого этот пир видит.
 @rpc("authority", "reliable")
 func apply_visibility(visible_ids: Array) -> void:
+	var seen := not visible_ids.is_empty()
+	if seen != is_seen:
+		is_seen = seen
+		seen_changed.emit(seen)
 	var my_id := multiplayer.get_unique_id()
 	for p in players_node.get_children():
 		var id := int(str(p.name))

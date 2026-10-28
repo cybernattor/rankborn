@@ -9,7 +9,7 @@ func physics_update(delta: float) -> void:
 		return
 
 	_apply_gravity(delta)
-	if _try_jump():
+	if _try_vault():
 		return
 
 	var input_dir := _get_input_vector()

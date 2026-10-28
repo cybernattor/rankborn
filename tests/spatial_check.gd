@@ -54,6 +54,8 @@ func _run() -> void:
 		_check(player.camera.unproject_position(on_ground).distance_to(cursor) < 1.0, "Точка под курсором не совпадает с курсором на экране")
 	_check_covers(world)
 	await _check_fog(world, player, remote)
+	await _check_sight_and_steps(world, player, remote)
+	await _check_vault(world, player)
 	for spawn: Marker3D in world.get_node("SpawnPoints").get_children():
 		var query := PhysicsRayQueryParameters3D.create(spawn.global_position, spawn.global_position - Vector3.UP * 40.0, 1)
 		var ground: Dictionary = world.get_world_3d().direct_space_state.intersect_ray(query)
@@ -344,6 +346,86 @@ func _check_fog(world: Node3D, player: CharacterBody3D, remote: CharacterBody3D)
 	remote.global_position = remote.spawn_position
 	await physics_frame
 	await physics_frame
+
+
+## Прицел не проходит сквозь стены; шаги слышны на ходу и не слышны в приседе и издалека;
+## индикатор «тебя видят» следует списку от хоста.
+func _check_sight_and_steps(world: Node3D, player: CharacterBody3D, remote: CharacterBody3D) -> void:
+	var manager: Node = world.get_node("VisibilityManager")
+	var place := func(body: Node3D, x: float, z: float) -> void:
+		body.global_position = Vector3(x, world.ground_height_at(x, z) + 0.05, z)
+	# Стена 6 × 2.2 м в центре вдоль оси X: целимся сквозь неё.
+	place.call(player, 0.0, -4.0)
+	await physics_frame
+	player._aim_direction = Vector3.BACK
+	player.aim_point = player.get_shot_origin() + Vector3.BACK * 10.0
+	var sight: Vector3 = player._compute_sight_point()
+	_check(sight.z < 0.0 and sight.z > -1.0, "Прицел проходит сквозь стену: %s" % sight)
+	player.aim_point = player.get_shot_origin() + Vector3.LEFT * 5.0
+	_check(player._compute_sight_point().is_equal_approx(player.aim_point), "Прицел обрезан без препятствия")
+	# Шаги: идёт — слышно, присел (медленно) — тихо, далеко — не слышно.
+	place.call(player, -10.0, 26.0)
+	place.call(remote, -14.0, 26.0)
+	await physics_frame
+	var walk := func(speed: float, seconds: float) -> int:
+		var before := _sounds(world, "step.wav").size()
+		manager._last_position.clear()
+		manager._speed.clear()
+		var frames := int(seconds * 60.0)
+		for i in frames:
+			remote.global_position += Vector3.FORWARD * speed / 60.0
+			manager._update_steps(1.0 / 60.0)
+		return _sounds(world, "step.wav").size() - before
+	_check(walk.call(5.0, 1.5) >= 3, "Шагов не слышно на ходу")
+	_check(walk.call(2.5, 1.5) == 0, "Шаги слышны в приседе")
+	place.call(remote, -10.0 - manager.HEARING_RANGE - 5.0, 26.0)
+	await physics_frame
+	_check(walk.call(5.0, 1.5) == 0, "Шаги слышны дальше радиуса слышимости")
+	# Индикатор видимости.
+	manager.apply_visibility([7])
+	_check(manager.is_seen, "Пир не знает, что его видят")
+	manager.apply_visibility([])
+	_check(not manager.is_seen, "Пир не знает, что он скрыт")
+	player.global_position = player.spawn_position
+	remote.global_position = remote.spawn_position
+	await physics_frame
+	await physics_frame
+
+
+## Перелезание как в Foxhole: через мешки с песком можно, через стену — нет.
+func _check_vault(world: Node3D, player: CharacterBody3D) -> void:
+	var place := func(x: float, z: float) -> void:
+		player.global_position = Vector3(x, world.ground_height_at(x, z) + 0.05, z)
+		player.velocity = Vector3.ZERO
+	# Мешки (-16, 14), 7 × 0.8 м вдоль оси X: подходим с юга, лицо мешков — z = 13.6.
+	place.call(-16.0, 12.9)
+	for i in 4:
+		await physics_frame
+	var plan: Dictionary = player.find_vault(Vector3.BACK)
+	_check(not plan.is_empty() and plan.landing.z > 14.4, "Через мешки с песком не перелезть: %s" % [plan])
+	_check(player.find_vault(Vector3.FORWARD).is_empty(), "Перелезание в пустоту")
+	player._aim_direction = Vector3.BACK
+	player._mouse_aim = false
+	await process_frame
+	await process_frame
+	_check(player.vault_available, "Кнопка VAULT не загорается у мешков")
+	if not plan.is_empty():
+		player.state_machine.change_state("VaultState", plan)
+		for i in 50:
+			await physics_frame
+		_check(player.global_position.z > 14.4 and not player.is_vaulting and not player.collision_shape.disabled,
+				"Перелезание не закончилось за укрытием")
+	# Стена 2.2 м в центре (z = 0): не перелезть.
+	place.call(0.0, -0.9)
+	for i in 4:
+		await physics_frame
+	_check(player.find_vault(Vector3.BACK).is_empty(), "Стену выше человека можно перелезть")
+	player.global_position = player.spawn_position
+	await physics_frame
+
+
+func _sounds(world: Node3D, file: String) -> Array:
+	return world.get_children().filter(func(n): return n is AudioStreamPlayer3D and n.stream.resource_path.ends_with(file))
 
 
 ## Пресеты графики применяются к окну и солнцу и переключаются на лету.

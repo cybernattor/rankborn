@@ -1,7 +1,7 @@
 extends State
 class_name PlayerState
 
-## Общая база для стейтов движения (Idle/Walk/Jump):
+## Общая база для стейтов движения (Idle/Walk/Jump — последний теперь только падение):
 ## гравитация, ускорение, вектор ввода и оружие.
 ## Весь ввод — через Input-действия: клавиатура, геймпад и MobileUI
 ## (он нажимает те же действия через Input.action_press).
@@ -11,7 +11,6 @@ const SPRINT_SPEED := 7.5
 const CROUCH_SPEED := 2.5
 ## С прицелом идут медленно, как в Foxhole.
 const AIM_SPEED := 2.2
-const JUMP_VELOCITY := 4.5
 const GROUND_ACCEL := 45.0
 const GROUND_DECEL := 55.0
 const AIR_ACCEL := 8.0
@@ -28,10 +27,6 @@ func _get_input_vector() -> Vector2:
 	if not player.can_control():
 		return Vector2.ZERO
 	return Input.get_vector("move_left", "move_right", "move_forward", "move_back")
-
-
-func _wants_jump() -> bool:
-	return player.can_control() and Input.is_action_just_pressed("jump") and player.is_on_floor()
 
 
 ## Спринт — только примерно туда, куда смотришь, не в прицеле и не в приседе:
@@ -60,15 +55,17 @@ func _apply_horizontal(input_dir: Vector2, accel: float, delta: float) -> void:
 	player.velocity.z = move_toward(player.velocity.z, target.z, accel * delta)
 
 
-## Прыжок из приседа сначала встаёт; возвращает true, если прыгнули.
-func _try_jump() -> bool:
-	if not _wants_jump():
+## Перелезание: пока зажат vault (как пробел у Foxhole — держишь, и солдат лезет, как
+## только упрётся в низкое укрытие). Направление — куда идёшь, стоя — куда целишься.
+func _try_vault() -> bool:
+	if not player.can_control() or not Input.is_action_pressed("vault"):
 		return false
-	if player.is_crouching:
-		player.stand_up()
+	var input_dir := _get_input_vector()
+	var direction: Vector3 = Vector3(input_dir.x, 0, input_dir.y) if input_dir.length() > 0.1 else player.get_aim_direction()
+	var plan: Dictionary = player.find_vault(direction)
+	if plan.is_empty():
 		return false
-	player.velocity.y = JUMP_VELOCITY
-	transitioned.emit("JumpState")
+	transitioned.emit("VaultState", plan)
 	return true
 
 

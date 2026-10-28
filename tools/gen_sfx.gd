@@ -20,6 +20,7 @@ const RATE := 44100
 const SHOT_PATH := "res://assets/audio/rifle_shot.wav"
 const BOLT_PATH := "res://assets/audio/rifle_bolt.wav"
 const RELOAD_PATH := "res://assets/audio/rifle_reload.wav"
+const STEP_PATH := "res://assets/audio/step.wav"
 
 var _rng := RandomNumberGenerator.new()
 
@@ -29,7 +30,8 @@ func _init() -> void:
 	_save(_make_shot(), SHOT_PATH, 0.95)
 	_save(_make_bolt(), BOLT_PATH, 0.8)
 	_save(_make_reload(), RELOAD_PATH, 0.8)
-	print("Звуки записаны: %s, %s, %s" % [SHOT_PATH, BOLT_PATH, RELOAD_PATH])
+	_save(_make_step(), STEP_PATH, 0.7)
+	print("Звуки записаны: %s, %s, %s, %s" % [SHOT_PATH, BOLT_PATH, RELOAD_PATH, STEP_PATH])
 	quit()
 
 
@@ -146,6 +148,21 @@ func _shell_ping(out: PackedFloat32Array, at: float, freq: float, gain: float) -
 		var v := sin(TAU * freq * t) * exp(-t / 0.03)
 		v += sin(TAU * freq * 2.76 * t) * exp(-t / 0.015) * 0.4
 		out[start + j] += v * gain * 0.5
+
+
+# Шаг по земле: глухой удар подошвы (середина, не бас — динамики телефонов) и короткий
+# хруст грунта поверх.
+func _make_step() -> PackedFloat32Array:
+	var n := int(RATE * 0.2)
+	var thud := _highpass(_lowpass(_lowpass(_noise(n), 700.0), 700.0), 160.0)
+	var grit := _highpass(_lowpass(_noise(n), 4000.0), 1400.0)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	for i in n:
+		var t := float(i) / RATE
+		var attack := minf(t / 0.004, 1.0)
+		out[i] = thud[i] * attack * exp(-t / 0.03) * 6.0 + grit[i] * attack * exp(-t / 0.045) * 0.8
+	return out
 
 
 func _noise(n: int) -> PackedFloat32Array:

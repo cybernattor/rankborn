@@ -9,6 +9,7 @@
 [ext_resource type="Script" uid="uid://bo3ocq8w32ka1" path="res://scripts/player/states/jump_state.gd" id="7_4ut37"]
 [ext_resource type="Script" uid="uid://boy20202wehro" path="res://scripts/player/states/dead_state.gd" id="8_3l2bb"]
 [ext_resource type="Script" uid="uid://b6w7jgoi1s5qr" path="res://scripts/player/states/respawn_state.gd" id="9_2pt4v"]
+[ext_resource type="Script" path="res://scripts/player/states/vault_state.gd" id="12_vault"]
 [ext_resource type="Script" uid="uid://cfchfmgc0u8k3" path="res://scripts/weapons/weapon_manager.gd" id="10_s7tvo"]
 [ext_resource type="Script" path="res://scripts/player/iso_camera.gd" id="11_isocam"]
 
@@ -74,6 +75,9 @@ script = ExtResource("8_3l2bb")
 
 [node name="RespawnState" type="Node" parent="StateMachine" unique_id=763490423]
 script = ExtResource("9_2pt4v")
+
+[node name="VaultState" type="Node" parent="StateMachine" unique_id=1488302177]
+script = ExtResource("12_vault")
 
 [node name="WeaponManager" type="Node" parent="." unique_id=1021333587]
 script = ExtResource("10_s7tvo")

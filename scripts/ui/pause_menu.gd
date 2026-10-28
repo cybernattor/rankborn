@@ -20,6 +20,7 @@ var _exit_timer: SceneTreeTimer
 @onready var aim_toggle_check: CheckBox = %AimToggleCheck
 @onready var crouch_toggle_check: CheckBox = %CrouchToggleCheck
 @onready var quality_option: OptionButton = %QualityOption
+@onready var show_fps_check: CheckBox = %ShowFpsCheck
 
 
 func _ready() -> void:
@@ -34,6 +35,7 @@ func _ready() -> void:
 	quality_option.item_selected.connect(_on_setting_changed.unbind(1))
 	aim_toggle_check.toggled.connect(_on_setting_changed.unbind(1))
 	crouch_toggle_check.toggled.connect(_on_setting_changed.unbind(1))
+	show_fps_check.toggled.connect(_on_setting_changed.unbind(1))
 	# На тач-экранах прицел и присед всегда переключаются нажатием.
 	aim_toggle_check.visible = not GameSettings.is_touch_device()
 	crouch_toggle_check.visible = not GameSettings.is_touch_device()
@@ -59,6 +61,7 @@ func _resume_game() -> void:
 func _load_settings_into_ui() -> void:
 	aim_toggle_check.set_pressed_no_signal(GameSettings.aim_toggle)
 	crouch_toggle_check.set_pressed_no_signal(GameSettings.crouch_toggle)
+	show_fps_check.set_pressed_no_signal(GameSettings.show_fps)
 	var choice := GameSettings.QUALITY_AUTO if GameSettings.is_auto_quality() else GameSettings.graphics_quality
 	quality_option.select(quality_option.get_item_index(choice))
 	_update_auto_label()
@@ -67,6 +70,7 @@ func _load_settings_into_ui() -> void:
 func _on_setting_changed() -> void:
 	GameSettings.aim_toggle = aim_toggle_check.button_pressed
 	GameSettings.crouch_toggle = crouch_toggle_check.button_pressed
+	GameSettings.show_fps = show_fps_check.button_pressed
 	GameSettings.set_quality_choice(quality_option.get_selected_id())
 	GameSettings.save_settings()
 

@@ -40,8 +40,9 @@ func _process(_delta: float) -> void:
 	var direction: Vector3 = player.get_aim_direction()
 	# Края конуса считаем от самого солдата, как летит пуля: на дальности прицела
 	# они ровно там, где пуля ложится на землю при крайнем отклонении.
+	# До первого укрытия, а не сквозь него (Player.sight_point).
 	var origin: Vector3 = player.global_position
-	var length: float = maxf(((player.aim_point - origin) * Vector3(1, 0, 1)).length(), 1.0)
+	var length: float = maxf(((player.get_aim_ground() - origin) * Vector3(1, 0, 1)).length(), 0.3)
 	var spread: float = weapon.get_spread_angle()
 	var left := _on_ground(origin + direction.rotated(Vector3.UP, spread) * length)
 	var right := _on_ground(origin + direction.rotated(Vector3.UP, -spread) * length)
