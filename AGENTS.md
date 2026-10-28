@@ -90,6 +90,7 @@ All input goes through Input actions (`move_*`, `shoot`, `aim`, `crouch`, `vault
 - LAN announces carry a per-session `host_id`; the browser keys lobbies by it so one host reachable via LAN and loopback shows once
 - Death (local player only): `DeathScreen` (`scripts/ui/death_screen.gd`, CanvasLayer 5 — above the weapon HUD, below `UILayer`) shows the killer's nick and the respawn countdown; the weapon HUD is hidden
 - The lobby list shows nicknames with «хост»/«вы» tags, never peer ids (host is always 1, clients get random ENet ids)
+- Match scene is preloaded in a background thread while players sit in the lobby (`MainMenu._preload_game_scene`), and the menu shows «Загрузка матча...» before the switch; the log prints how long the scene took (`Сцена матча получена`, `Мир собран`) — read these when someone reports slow match entry
 - Pause menu: «Продолжить» right under the title, «Выйти в меню» at the bottom after a spacer and only on a second press within 3 s (players left matches by accident)
 - Pause never sets `get_tree().paused` (network game keeps running); the menu sets `player.input_blocked`
 - Player collision shape is duplicated per instance in `_ready` — crouch changes its height

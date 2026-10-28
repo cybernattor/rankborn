@@ -49,6 +49,7 @@ var local_player_id: int = 1
 
 
 func _ready() -> void:
+	var ready_started := Time.get_ticks_msec()
 	_build_lowpoly_terrain()
 	_build_covers()
 
@@ -86,6 +87,7 @@ func _ready() -> void:
 	auto_quality.name = "AutoQuality"
 	add_child(auto_quality)
 	_fade_in_with_prewarm()
+	print("Мир собран за %d мс" % (Time.get_ticks_msec() - ready_started))
 
 
 func _build_lowpoly_terrain() -> void:
