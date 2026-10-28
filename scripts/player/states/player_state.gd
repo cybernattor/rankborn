@@ -55,6 +55,20 @@ func _apply_horizontal(input_dir: Vector2, accel: float, delta: float) -> void:
 	player.velocity.z = move_toward(player.velocity.z, target.z, accel * delta)
 
 
+## Перелезание: пока зажат vault (как пробел у Foxhole — держишь, и солдат лезет, как
+## только упрётся в низкое укрытие). Направление — куда идёшь, стоя — куда целишься.
+func _try_vault() -> bool:
+	if not player.can_control() or not Input.is_action_pressed("vault"):
+		return false
+	var input_dir := _get_input_vector()
+	var direction: Vector3 = Vector3(input_dir.x, 0, input_dir.y) if input_dir.length() > 0.1 else player.get_aim_direction()
+	var plan: Dictionary = player.find_vault(direction)
+	if plan.is_empty():
+		return false
+	transitioned.emit("VaultState", plan)
+	return true
+
+
 # Единственная точка опроса стрельбы/перезарядки — через WeaponManager.
 func _handle_weapon_input() -> void:
 	if not player.can_control():

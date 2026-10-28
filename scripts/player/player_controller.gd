@@ -95,6 +95,22 @@ const STAND_HEAD_Y := 1.6
 const CROUCH_HEAD_Y := 1.05
 const CROUCH_TRANSITION_SPEED := 10.0
 
+## Перелезание через низкое укрытие (VaultState, Foxhole: пробел). Мешки с песком
+## перелезаются, стены (2.2 м над любой точкой под ними) — нет. Предел — от земли под
+## ногами: высота укрытий отсчитывается от верхнего угла, и на склоне мешки местами
+## выше своих 1.25 м (до ~1.55).
+var is_vaulting: bool = false
+## Перед солдатом есть через что перелезть — для подсветки кнопки VAULT на таче.
+var vault_available: bool = false
+const VAULT_MAX_HEIGHT := 1.7
+const VAULT_MIN_HEIGHT := 0.3
+## Как далеко перед собой ищем укрытие и какой толщины оно может быть.
+const VAULT_REACH := 1.1
+const VAULT_MAX_DEPTH := 1.2
+const VAULT_PROBE_HEIGHT := 0.5
+## Отступ места приземления от дальней стороны укрытия (радиус капсулы + запас).
+const VAULT_LANDING_GAP := 0.6
+
 ## Синхронизируется по сети (SceneReplicationConfig в player.tscn).
 var is_crouching: bool = false:
 	set(value):
@@ -274,6 +290,7 @@ func _process(delta: float) -> void:
 		rotation.y = atan2(-_aim_direction.x, -_aim_direction.z)
 	aim_point = _compute_aim_point()
 	sight_point = _compute_sight_point()
+	vault_available = can_control() and not is_vaulting and not find_vault(_vault_direction()).is_empty()
 
 
 ## Направление прицеливания: правый стик (геймпад; на таче его нажимает MobileUI)
@@ -305,6 +322,60 @@ func _update_aim_direction(delta: float) -> void:
 	if to_cursor.length_squared() > 0.000001:
 		_aim_direction = to_cursor.normalized()
 		_aim_distance = maxf(to_cursor.length(), MIN_AIM_DISTANCE)
+
+
+func _vault_direction() -> Vector3:
+	var move := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+	return Vector3(move.x, 0, move.y) if move.length() > 0.1 else _aim_direction
+
+
+## Маршрут перелезания в сторону direction: {"landing": точка за укрытием, "top": высота
+## его верха} или пусто, если перелезать не через что (нет укрытия, оно выше человека,
+## слишком толстое или за ним некуда встать).
+func find_vault(direction: Vector3) -> Dictionary:
+	var dir := (direction * Vector3(1, 0, 1)).normalized()
+	if dir == Vector3.ZERO or not is_on_floor() or not is_inside_tree():
+		return {}
+	var space := get_world_3d().direct_space_state
+	var feet := global_position
+	var ray := func(from: Vector3, to: Vector3) -> Dictionary:
+		return space.intersect_ray(PhysicsRayQueryParameters3D.create(from, to, SIGHT_BLOCKING_MASK, [get_rid()]))
+	# Укрытие на уровне колен прямо перед собой.
+	var knee := feet + Vector3.UP * VAULT_PROBE_HEIGHT
+	var face: Dictionary = ray.call(knee, knee + dir * VAULT_REACH)
+	if face.is_empty() or face.normal.y > 0.7:
+		return {}  # ничего нет или это пологий склон, а не укрытие
+	# Над ним на высоте выше человека должно быть свободно — иначе это стена.
+	var high := feet + Vector3.UP * (VAULT_MAX_HEIGHT + 0.1)
+	if not ray.call(high, high + dir * (VAULT_REACH + VAULT_MAX_DEPTH)).is_empty():
+		return {}
+	# Верх укрытия.
+	var above: Vector3 = face.position + dir * 0.15
+	var top: Dictionary = ray.call(Vector3(above.x, high.y, above.z), Vector3(above.x, feet.y, above.z))
+	if top.is_empty():
+		return {}
+	var height: float = top.position.y - feet.y
+	if height < VAULT_MIN_HEIGHT or height > VAULT_MAX_HEIGHT:
+		return {}
+	# Дальняя сторона: луч навстречу с той стороны. Если он начинается внутри укрытия
+	# (толще VAULT_MAX_DEPTH), попадания не будет — перелезать некуда.
+	var probe_y: float = knee.y
+	var far_start: Vector3 = face.position + dir * (VAULT_MAX_DEPTH + VAULT_LANDING_GAP)
+	far_start.y = probe_y
+	var back: Dictionary = ray.call(far_start, Vector3(face.position.x, probe_y, face.position.z))
+	if back.is_empty():
+		return {}
+	var landing: Vector3 = back.position + dir * VAULT_LANDING_GAP
+	landing.y = ground_height_at(landing) + 0.05
+	# Место приземления свободно.
+	var shape := PhysicsShapeQueryParameters3D.new()
+	shape.shape = collision_shape.shape
+	shape.transform = Transform3D(Basis.IDENTITY, landing + Vector3.UP * (get_body_height() * 0.5 + 0.05))
+	shape.collision_mask = collision_mask
+	shape.exclude = [get_rid()]
+	if not space.intersect_shape(shape, 1).is_empty():
+		return {}
+	return {"landing": landing, "top": top.position.y}
 
 
 func _compute_sight_point() -> Vector3:

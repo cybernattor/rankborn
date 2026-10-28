@@ -186,6 +186,7 @@ func _check_movement() -> void:
 		await physics_frame
 	_check(is_zero_approx(_horizontal_speed()), "Игрок не останавливается")
 	_check(not InputMap.has_action("jump"), "Прыжок вернулся: им перескакивают укрытия")
+	_check(InputMap.has_action("vault"), "Нет перелезания (пробел)")
 
 
 func _check_crouch() -> void:
@@ -334,6 +335,8 @@ func _check_touch() -> void:
 	await _touch(3, fire_left, false)
 	_check(not Input.is_action_pressed("shoot"))
 	_check(not ui._buttons.has("aim"), "Кнопка AIM на таче лишняя: прицел держит стик")
+	_check(ui._buttons.has("vault") and not ui._buttons.has("jump"), "На таче нет VAULT или остался JUMP")
+	_check(not player.vault_available, "VAULT активна в чистом поле")
 	# Смерть с зажатым стиком прицела: отпускание во время смерти не залипает.
 	await _touch(5, aim_start, true)
 	await _drag(5, aim_start + Vector2(80, 0), Vector2(80, 0))
