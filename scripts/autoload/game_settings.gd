@@ -31,6 +31,9 @@ const QUALITY_PRESETS := {
 ## Выбор игрока: пресет или QUALITY_AUTO (по умолчанию).
 const QUALITY_AUTO := 3
 var graphics_quality: int = QUALITY_AUTO
+## Счётчик FPS с пресетом, рендерером и разрешением в углу экрана. Пока прототип и замеры
+## на телефонах — включён по умолчанию, в том числе в release-сборках.
+var show_fps: bool = true
 ## Уровень, до которого дошла автонастройка (AutoQuality); с него начинается следующий матч.
 var auto_quality_level: int = -1
 
@@ -49,6 +52,7 @@ func load_settings() -> void:
 	player_name = cfg.get_value("profile", "player_name", player_name)
 	graphics_quality = cfg.get_value("graphics", "quality", graphics_quality)
 	auto_quality_level = cfg.get_value("graphics", "auto_level", auto_quality_level)
+	show_fps = cfg.get_value("graphics", "show_fps", show_fps)
 	changed.emit()
 
 
@@ -59,6 +63,7 @@ func save_settings() -> void:
 	cfg.set_value("profile", "player_name", player_name)
 	cfg.set_value("graphics", "quality", graphics_quality)
 	cfg.set_value("graphics", "auto_level", auto_quality_level)
+	cfg.set_value("graphics", "show_fps", show_fps)
 	cfg.save(SETTINGS_PATH)
 	changed.emit()
 

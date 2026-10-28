@@ -28,8 +28,10 @@ var _hit_marker_tween: Tween
 
 ## На тач-экране патроны — сверху по центру: справа внизу стик прицела и кнопки.
 const TOUCH_AMMO_MARGIN_TOP := 12.0
-## Счётчик кадров в отладочных сборках — чтобы тестеры могли назвать цифры.
+## Счётчик кадров (настройка «Показывать FPS»): FPS, пресет графики, рендерер и разрешение
+## 3D — чтобы тестеры называли цифры вместе с условиями, а не просто «40».
 var _fps_label: Label
+const RENDERER_NAMES := {"mobile": "Vulkan Mobile", "forward_plus": "Vulkan Forward+", "gl_compatibility": "OpenGL (Compatibility)"}
 var _touch_layout: bool = false
 
 
@@ -43,13 +45,12 @@ func _ready() -> void:
 	# (камера сверху): позицию задаём сами, от левого верхнего угла.
 	for marker: Control in [crosshair, hit_marker]:
 		marker.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	if OS.is_debug_build():
-		_fps_label = Label.new()
-		_fps_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		_fps_label.position = Vector2(16, 12)
-		_fps_label.add_theme_color_override("font_outline_color", Color.BLACK)
-		_fps_label.add_theme_constant_override("outline_size", 4)
-		$UILayer.add_child(_fps_label)
+	_fps_label = Label.new()
+	_fps_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_fps_label.position = Vector2(16, 12)
+	_fps_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	_fps_label.add_theme_constant_override("outline_size", 4)
+	$UILayer.add_child(_fps_label)
 
 
 func setup(weapon_mgr: WeaponManager) -> void:
@@ -88,8 +89,9 @@ func _get_weapon() -> WeaponBase:
 
 func _process(delta: float) -> void:
 	_update_touch_layout()
-	if _fps_label:
-		_fps_label.text = "FPS %d" % Engine.get_frames_per_second()
+	_fps_label.visible = GameSettings.show_fps
+	if _fps_label.visible:
+		_fps_label.text = _fps_text()
 	var weapon := _get_weapon()
 	if not weapon:
 		return
@@ -235,3 +237,15 @@ func _find_player() -> Node3D:
 			return node
 		node = node.get_parent()
 	return null
+
+
+func _fps_text() -> String:
+	var quality: String = GameSettings.QUALITY_NAMES[GameSettings.get_quality()]
+	if GameSettings.is_auto_quality():
+		quality += " (авто)"
+	var method := RenderingServer.get_current_rendering_method()
+	var vp := get_viewport()
+	var render_size := Vector2(vp.size) * vp.scaling_3d_scale
+	return "FPS %d · %s · %s · %d×%d%s" % [Engine.get_frames_per_second(), quality,
+			RENDERER_NAMES.get(method, method), render_size.x, render_size.y,
+			" · debug" if OS.is_debug_build() else ""]
