@@ -49,6 +49,7 @@ var local_player_id: int = 1
 
 
 func _ready() -> void:
+	var ready_started := Time.get_ticks_msec()
 	_build_lowpoly_terrain()
 	_build_covers()
 
@@ -71,6 +72,12 @@ func _ready() -> void:
 	mobile_ui.pause_pressed.connect(pause_menu.toggle)
 	pause_menu.visibility_changed.connect(_on_pause_visibility_changed)
 	_bind_local_player_ui()
+	var kill_feed := KillFeed.new()
+	kill_feed.name = "KillFeed"
+	add_child(kill_feed)
+	if game_mode.has_signal("killfeed_entry"):
+		game_mode.killfeed_entry.connect(func(killer: String, victim: String, _weapon: String) -> void:
+			kill_feed.add_entry(killer, victim))
 	var visibility := VisibilityManager.new()
 	visibility.name = "VisibilityManager"
 	add_child(visibility)
@@ -80,6 +87,7 @@ func _ready() -> void:
 	auto_quality.name = "AutoQuality"
 	add_child(auto_quality)
 	_fade_in_with_prewarm()
+	print("Мир собран за %d мс" % (Time.get_ticks_msec() - ready_started))
 
 
 func _build_lowpoly_terrain() -> void:

@@ -90,6 +90,16 @@ func _run() -> void:
 	remote.global_position = Vector3(30, 20, 30)
 	await _check_shots(world, player, rifle)
 	player.set_process(true)  # камера смерти живёт в _process
+	# Обратная связь урона: полоска здоровья, дуга в сторону стрелка (remote стоит в +x +z).
+	var damage_hud: DamageHud = player.get_node("DamageHud")
+	player.health_component.take_damage(30.0, 7)
+	await process_frame
+	_check(is_equal_approx(damage_hud._bar_fill.size.x, (DamageHud.BAR_SIZE.x - 4.0) * 0.7), "Полоска здоровья не отражает урон")
+	_check(damage_hud._arcs.size() == 1 and damage_hud._arcs[0].dir.x > 0.5 and damage_hud._arcs[0].dir.z > 0.5, "Нет дуги в сторону стрелка")
+	_check(damage_hud._flash.modulate.a > 0.0, "Нет вспышки при уроне")
+	player.health_component.take_damage(5.0)  # без стрелка (зона смерти): вспышка есть, дуги нет
+	await process_frame
+	_check(damage_hud._arcs.size() == 1, "Дуга появилась без стрелка")
 	player.health_component.take_damage(9999.0, 7)
 	await process_frame
 	_check(not player.visible and player.get_node("CollisionShape3D").disabled)
@@ -98,6 +108,8 @@ func _run() -> void:
 	_check(not player.weapon_hud.visible, "HUD оружия виден после смерти")
 	await create_timer(1.0).timeout
 	_check(world.game_mode.get_score(1).deaths == 1)
+	var feed: KillFeed = world.get_node("KillFeed")
+	_check(feed._list.get_child_count() == 1 and "Remote" in feed._list.get_child(0).text and "Host" in feed._list.get_child(0).text, "Килфид не показал убийство")
 	# Перед смертью смотрим вбок — после респавна взгляд должен вернуться к центру карты.
 	player.rotation.y = PI * 0.5
 	player._aim_direction = Vector3.RIGHT
@@ -223,6 +235,23 @@ func _check_shots(world: Node3D, player: CharacterBody3D, rifle: Node3D) -> void
 	await create_timer(rifle.BOLT_SOUND_DELAY + 0.1).timeout
 	_check(rifle.get_children().any(func(n): return n is AudioStreamPlayer3D and n.stream.resource_path.ends_with("rifle_bolt.wav")),
 			"Звук затвора не едет с винтовкой")
+	# Попадания и свист: прогрев беззвучен, пуля мимо слушателя свистит, своя и попавшая в него — нет.
+	var hit_before := _sounds(world, "hit_flesh.wav").size() + _sounds(world, "hit_dirt.wav").size() + _sounds(world, "hit_hard.wav").size()
+	rifle._spawn_impact(Vector3(2, 0, 2), Vector3.UP, false)
+	_check(_sounds(world, "hit_dirt.wav").size() + _sounds(world, "hit_flesh.wav").size() + _sounds(world, "hit_hard.wav").size() == hit_before, "Прогрев играет звук попадания")
+	rifle._spawn_impact(Vector3(2, 0, 2), Vector3.UP)
+	rifle._spawn_impact(Vector3(2, 1, 2), Vector3.BACK)
+	rifle._spawn_blood(Vector3(2, 1, 2), Vector3.UP, 1)  # жертва — мы: брызг нет, шлепок слышен
+	_check(_sounds(world, "hit_dirt.wav").size() == 1 and _sounds(world, "hit_hard.wav").size() == 1 and _sounds(world, "hit_flesh.wav").size() == 1, "Нет звуков попадания в землю, камень, тело")
+	var remote_rifle_w: Node = world.get_node("Players/7/Head/WeaponPivot/Rifle")
+	var ear: Vector3 = player.global_position + Vector3.UP * 1.5
+	remote_rifle_w._spawn_tracer(ear + Vector3(-10, 0, 2), ear + Vector3(10, 0, 2))
+	_check(_sounds(world, "bullet_whiz.wav").size() == 1, "Пуля в 2 м от слушателя не свистит")
+	remote_rifle_w._spawn_tracer(ear + Vector3(-10, 0, 15), ear + Vector3(10, 0, 15))
+	remote_rifle_w._spawn_tracer(ear + Vector3(-10, 0, 0.5), ear + Vector3(0, 0, 0.5))
+	_check(_sounds(world, "bullet_whiz.wav").size() == 1, "Свистит далёкая пуля или попавшая в слушателя")
+	rifle._spawn_tracer(ear + Vector3(-10, 0, 2), ear + Vector3(10, 0, 2))
+	_check(_sounds(world, "bullet_whiz.wav").size() == 1, "Свистят свои пули")
 	rifle.current_ammo = 0
 	rifle.reload()
 	# Звук перезарядки едет с винтовкой: убежал — он не остаётся позади.
@@ -270,9 +299,9 @@ func _check_shots(world: Node3D, player: CharacterBody3D, rifle: Node3D) -> void
 	rifle._spawn_blood(origin, Vector3.UP)
 	var blood: Node3D = world.get_child(world.get_child_count() - 1)
 	_check(blood.get_node("BloodDrops") is GPUParticles3D and blood.get_node("BloodMist") is GPUParticles3D)
-	var children_before := world.get_child_count()
+	var children_before := world.get_children().filter(func(n): return not n is AudioStreamPlayer3D).size()
 	rifle._spawn_blood(origin, Vector3.UP, world.multiplayer.get_unique_id())
-	_check(world.get_child_count() == children_before, "У жертвы брызги крови появляются перед камерой")
+	_check(world.get_children().filter(func(n): return not n is AudioStreamPlayer3D).size() == children_before, "У жертвы брызги крови появляются перед камерой")
 	_check_hud(player)
 	target.queue_free()
 

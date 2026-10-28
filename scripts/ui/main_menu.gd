@@ -7,6 +7,8 @@ extends Control
 @onready var address_input: LineEdit = %AddressInput
 @onready var port_input: LineEdit = %PortInput
 @onready var status_label: Label = %StatusLabel
+
+const GAME_SCENE_PATH := "res://scenes/game/game_scene.tscn"
 @onready var ip_label: Label = %IpLabel
 @onready var player_list: ItemList = %PlayerList
 @onready var found_games_list: ItemList = %FoundGamesList
@@ -182,6 +184,7 @@ func _on_start_pressed() -> void:
 
 func _on_server_created() -> void:
 	_in_lobby = true
+	_preload_game_scene()
 	var lan_ip := NetworkManager.get_lan_ip()
 	var port := int(port_input.text) if port_input.text != "" else NetworkManager.DEFAULT_PORT
 	if LanDiscovery._mode == "host":
@@ -198,6 +201,7 @@ func _on_server_created() -> void:
 
 func _on_connection_succeeded() -> void:
 	_in_lobby = true
+	_preload_game_scene()
 	status_label.text = "В лобби. Ждём старта хоста..."
 	_set_connect_ui_enabled(false)
 	start_button.visible = false
@@ -240,8 +244,23 @@ func _on_player_disconnected(_id: int) -> void:
 	_update_player_list()
 
 
+## Тяжёлую сцену матча начинаем грузить в фоне, пока игроки сидят в лобби: иначе по сигналу
+## «старт» меню замирало на секунды (на планшете) без единого сообщения.
+func _preload_game_scene() -> void:
+	ResourceLoader.load_threaded_request(GAME_SCENE_PATH)
+
+
 func _on_match_started() -> void:
-	get_tree().change_scene_to_file("res://scenes/game/game_scene.tscn")
+	var started := Time.get_ticks_msec()
+	status_label.text = "Загрузка матча..."
+	# Кадр с надписью должен успеть отрисоваться до блокирующего перехода.
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var packed := ResourceLoader.load_threaded_get(GAME_SCENE_PATH) as PackedScene
+	if packed == null:  # фоновая загрузка не запрашивалась или сорвалась
+		packed = load(GAME_SCENE_PATH)
+	print("Сцена матча получена за %d мс" % (Time.get_ticks_msec() - started))
+	get_tree().change_scene_to_packed(packed)
 
 
 func _on_games_updated(games: Array) -> void:

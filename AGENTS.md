@@ -26,7 +26,7 @@ LAN discovery is broadcast-based (port 7001). Instances on the same machine disc
 **Autoloads** (singletons, always available):
 - `NetworkManager` → ENet P2P, player registry, host/client logic (`scripts/autoload/network_manager.gd`)
 - `LanDiscovery` → UDP broadcast lobby browser (`scripts/autoload/lan_discovery.gd`)
-- `SFXManager` → Audio (`scripts/audio/sfx_manager.gd`): shots and bolt are positional `AudioStreamPlayer3D` in the world; the listener is the local soldier's `Ears` (top_level `AudioListener3D` with the camera's basis), not the camera 20 m above. Sounds are synthesized by `tools/gen_sfx.gd` (`godot --headless --path . --script tools/gen_sfx.gd`), energy in the mids — tablet speakers drop everything below ~250 Hz
+- `SFXManager` → Audio (`scripts/audio/sfx_manager.gd`): shots and bolt are positional `AudioStreamPlayer3D` in the world; the listener is the local soldier's `Ears` (top_level `AudioListener3D` with the camera's basis), not the camera 20 m above. Hits (flesh/dirt/hard), bullet whiz (within 4 m of the listener's head, never your own shots) and reload are positional too. Metal sounds are noise only — a pure sine at 3–5 kHz sounds like a marimba note; `python3 tools/check_tonal.py assets/audio/*.wav` flags pure tones. Sounds are synthesized by `tools/gen_sfx.gd` (`godot --headless --path . --script tools/gen_sfx.gd`), energy in the mids — tablet speakers drop everything below ~250 Hz
 - `GameSettings` → Controls settings and nickname, saved to `user://settings.cfg`; `is_touch_device()` (`scripts/autoload/game_settings.gd`)
 
 **Scene flow**: `main_menu.tscn` → (host or join) → `game_scene.tscn` (spawns players, builds terrain)
@@ -91,6 +91,7 @@ All input goes through Input actions (`move_*`, `shoot`, `aim`, `crouch`, `vault
 - LAN announces carry a per-session `host_id`; the browser keys lobbies by it so one host reachable via LAN and loopback shows once
 - Death (local player only): `DeathScreen` (`scripts/ui/death_screen.gd`, CanvasLayer 5 — above the weapon HUD, below `UILayer`) shows the killer's nick and the respawn countdown; the weapon HUD is hidden
 - The lobby list shows nicknames with «хост»/«вы» tags, never peer ids (host is always 1, clients get random ENet ids)
+- Match scene is preloaded in a background thread while players sit in the lobby (`MainMenu._preload_game_scene`), and the menu shows «Загрузка матча...» before the switch; the log prints how long the scene took (`Сцена матча получена`, `Мир собран`) — read these when someone reports slow match entry
 - Pause menu: «Продолжить» right under the title, «Выйти в меню» at the bottom after a spacer and only on a second press within 3 s (players left matches by accident)
 - Pause never sets `get_tree().paused` (network game keeps running); the menu sets `player.input_blocked`
 - Player collision shape is duplicated per instance in `_ready` — crouch changes its height

@@ -5,6 +5,8 @@ class_name HealthComponent
 ## Работает по сети: RPC any_peer → authority.
 
 signal health_changed(new_health: float)
+## Только у владельца (жертвы), когда урон реально принят: для вспышки и дуги направления.
+signal damaged(amount: float, attacker_id: int)
 signal died(attacker_id: int)
 signal life_state_changed(alive: bool)
 ## Локальный сигнал: приходит только на машине атакующего, когда жертва
@@ -36,6 +38,7 @@ func take_damage(amount: float, attacker_id: int = -1) -> void:
 
 	current_health = maxf(current_health - amount, 0.0)
 	health_changed.emit(current_health)
+	damaged.emit(amount, attacker_id)
 
 	if current_health <= 0.0:
 		is_alive = false
