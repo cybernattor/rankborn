@@ -13,12 +13,14 @@ const MAX_DISTANCE := 120.0
 var _shot: AudioStream
 var _bolt: AudioStream
 var _empty: AudioStream
+var _step: AudioStream
 
 
 func _ready() -> void:
 	_shot = load("res://assets/audio/rifle_shot.wav")
 	_bolt = load("res://assets/audio/rifle_bolt.wav")
 	_empty = load("res://assets/audio/empty.wav")
+	_step = load("res://assets/audio/step.wav")
 
 
 func _play(stream: AudioStream, volume_db: float = 0.0) -> void:
@@ -55,6 +57,11 @@ func play_shot_at(position: Vector3) -> void:
 
 func play_bolt_at(position: Vector3) -> void:
 	_play_at(_bolt, position, -6.0)
+
+
+## Шаг: свои — тише, чужие — громче (по ним слышно, что кто-то рядом).
+func play_step_at(position: Vector3, own: bool) -> void:
+	_play_at(_step, position, -12.0 if own else -3.0)
 
 
 func play_empty() -> void:

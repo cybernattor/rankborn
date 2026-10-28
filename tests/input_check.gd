@@ -185,12 +185,7 @@ func _check_movement() -> void:
 	for i in 30:
 		await physics_frame
 	_check(is_zero_approx(_horizontal_speed()), "Игрок не останавливается")
-	Input.action_press("jump")
-	await physics_frame
-	await physics_frame
-	Input.action_release("jump")
-	_check(player.velocity.y > 0.0, "Прыжок по действию jump не работает")
-	await _wait_landed()
+	_check(not InputMap.has_action("jump"), "Прыжок вернулся: им перескакивают укрытия")
 
 
 func _check_crouch() -> void:
@@ -305,7 +300,7 @@ func _check_touch() -> void:
 	_check(player.get_aim_direction().dot(Vector3.RIGHT) > 0.95, "Стик прицела не поворачивает прицел")
 	var near: float = player._aim_distance
 	await _drag(1, aim_start + Vector2(0, -80), Vector2(-30, -80))
-	# В прицеле поворот стиком ограничен STICK_TURN_SPEED_ADS: 90° — около 0.7 с.
+	# В прицеле поворот стиком ограничен STICK_TURN_SPEED_ADS: 90° — около 0.35 с.
 	await create_timer(1.0).timeout
 	_check(player.get_aim_direction().dot(Vector3.FORWARD) > 0.95, "Стик прицела вверх не целится вперёд")
 	_check(player._aim_distance > near + 3.0, "Отклонение стика не задаёт дальность")

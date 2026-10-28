@@ -108,7 +108,7 @@ rankborn/
 
 ## Управление
 
-Весь ввод — Input-действия (`move_*`, `shoot`, `aim`, `jump`, `crouch`, `sprint`, `reload`,
+Весь ввод — Input-действия (`move_*`, `shoot`, `aim`, `crouch`, `sprint`, `reload`,
 `pause`, `look_*`, `weapon_next/prev`). Клавиатура, геймпад и тач идут одним путём:
 `MobileUI` нажимает действия через `Input.action_press`; правый стик на таче нажимает
 `look_*` так же, как правый стик геймпада. Наружу из `MobileUI` идёт только кнопка паузы. Эмуляция мыши из тача **включена**

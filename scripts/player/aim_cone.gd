@@ -39,7 +39,8 @@ func _process(_delta: float) -> void:
 		return
 	var direction: Vector3 = player.get_aim_direction()
 	var origin: Vector3 = player.global_position + direction * START_OFFSET
-	var length: float = maxf(((player.aim_point - origin) * Vector3(1, 0, 1)).length(), 1.0)
+	# До первого укрытия, а не сквозь него (Player.sight_point).
+	var length: float = maxf(((player.sight_point - origin) * Vector3(1, 0, 1)).length(), 0.3)
 	var spread: float = weapon.get_spread_angle()
 	var left := _on_ground(origin + direction.rotated(Vector3.UP, spread) * length)
 	var right := _on_ground(origin + direction.rotated(Vector3.UP, -spread) * length)

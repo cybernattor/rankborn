@@ -33,6 +33,13 @@ const TOUCH_AMMO_MARGIN_TOP := 12.0
 var _fps_label: Label
 const RENDERER_NAMES := {"mobile": "Vulkan Mobile", "forward_plus": "Vulkan Forward+", "gl_compatibility": "OpenGL (Compatibility)"}
 var _touch_layout: bool = false
+## Туман войны: видит ли нас кто-нибудь (VisibilityManager.is_seen). Без этого игрок не
+## понимал, спрятался он за укрытием или нет («противник видит тебя сверху»).
+var _seen_label: Label
+const SEEN_TEXT := "ТЕБЯ ВИДЯТ"
+const HIDDEN_TEXT := "СКРЫТ"
+const SEEN_COLOR := Color(1.0, 0.45, 0.35)
+const HIDDEN_COLOR := Color(0.55, 0.95, 0.55)
 
 
 func _ready() -> void:
@@ -51,6 +58,13 @@ func _ready() -> void:
 	_fps_label.add_theme_color_override("font_outline_color", Color.BLACK)
 	_fps_label.add_theme_constant_override("outline_size", 4)
 	$UILayer.add_child(_fps_label)
+	_seen_label = Label.new()
+	_seen_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_seen_label.position = Vector2(16, 40)
+	_seen_label.add_theme_font_size_override("font_size", 20)
+	_seen_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	_seen_label.add_theme_constant_override("outline_size", 5)
+	$UILayer.add_child(_seen_label)
 
 
 func setup(weapon_mgr: WeaponManager) -> void:
@@ -89,6 +103,7 @@ func _get_weapon() -> WeaponBase:
 
 func _process(delta: float) -> void:
 	_update_touch_layout()
+	_update_seen_label()
 	_fps_label.visible = GameSettings.show_fps
 	if _fps_label.visible:
 		_fps_label.text = _fps_text()
@@ -113,7 +128,7 @@ func _process(delta: float) -> void:
 func _update_crosshair_position() -> void:
 	if not _player or not "aim_point" in _player:
 		return
-	var screen_pos: Vector2 = _player.camera.unproject_position(_player.aim_point)
+	var screen_pos: Vector2 = _player.camera.unproject_position(_player.sight_point)
 	crosshair.position = screen_pos
 	hit_marker.position = screen_pos
 
@@ -157,7 +172,7 @@ func _calculate_spread() -> float:
 		return 0.0
 	# Радиус конуса разброса на дальности прицела, переведённый в пиксели экрана.
 	var camera: Camera3D = _player.camera
-	var aim: Vector3 = _player.aim_point
+	var aim: Vector3 = _player.sight_point
 	var distance: float = _player.get_shot_origin().distance_to(aim)
 	var side: Vector3 = _player.get_aim_direction().cross(Vector3.UP).normalized()
 	var edge := aim + side * distance * tan(weapon.get_spread_angle())
@@ -249,3 +264,14 @@ func _fps_text() -> String:
 	return "FPS %d · %s · %s · %d×%d%s" % [Engine.get_frames_per_second(), quality,
 			RENDERER_NAMES.get(method, method), render_size.x, render_size.y,
 			" · debug" if OS.is_debug_build() else ""]
+
+
+func _update_seen_label() -> void:
+	var scene := get_tree().current_scene
+	var manager: Node = scene.get_node_or_null("VisibilityManager") if scene else null
+	_seen_label.visible = manager != null
+	if not manager:
+		return
+	var seen: bool = manager.is_seen
+	_seen_label.text = SEEN_TEXT if seen else HIDDEN_TEXT
+	_seen_label.add_theme_color_override("font_color", SEEN_COLOR if seen else HIDDEN_COLOR)

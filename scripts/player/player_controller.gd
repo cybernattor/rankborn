@@ -43,6 +43,12 @@ const AIM_MOVING_SPEED := 1.0
 const AIM_SHOT_KEEP := 0.35
 ## Точка, куда целится игрок (мир): на высоте выстрела над землёй под прицелом.
 var aim_point: Vector3 = Vector3.ZERO
+## Куда прицел реально «достаёт»: aim_point, обрезанный первым укрытием или склоном на
+## пути выстрела. По нему рисуются прицел HUD и конус — раньше они проходили сквозь
+## стены и показывали точку, в которую пуля попасть не могла.
+var sight_point: Vector3 = Vector3.ZERO
+## Слой мира (земля и укрытия) — то, что останавливает пулю, кроме игроков.
+const SIGHT_BLOCKING_MASK := 1
 var _aim_direction := Vector3.FORWARD
 var _aim_distance: float = STICK_AIM_DISTANCE
 ## Последним прицеливались мышью (иначе — стиком). Переключается тем, чем пошевелили.
@@ -59,9 +65,10 @@ const STICK_AIM_DEADZONE := 0.2
 ## Поворот прицела стиком — плавный и с пределом скорости: мгновенный поворот за стиком
 ## дёргал прицел от дрожи пальца и был слишком быстрым. В прицеле — медленнее и точнее.
 ## Мышь точна сама по себе, её не сглаживаем.
-const STICK_TURN_SMOOTHING := 14.0
-const STICK_TURN_SPEED := 6.0
-const STICK_TURN_SPEED_ADS := 2.2
+## Первый вариант (6 и 2.2 рад/с) на плейтесте показался слишком медленным.
+const STICK_TURN_SMOOTHING := 20.0
+const STICK_TURN_SPEED := 11.0
+const STICK_TURN_SPEED_ADS := 4.5
 const STICK_DISTANCE_SMOOTHING := 8.0
 ## Мёртвая зона курсора вокруг солдата — в пикселях экрана, а не в метрах: при 1 м
 ## (≈90 px на экране) прицел «застревал» на полсекунды, пока курсор проходил через
@@ -182,6 +189,7 @@ func face_map_center() -> void:
 		rotation.y = atan2(-_aim_direction.x, -_aim_direction.z)
 	_aim_distance = STICK_AIM_DISTANCE
 	aim_point = _compute_aim_point()
+	sight_point = _compute_sight_point()
 	head.position.y = get_head_height()
 	if is_node_ready() and camera.current:
 		camera.snap()
@@ -265,6 +273,7 @@ func _process(delta: float) -> void:
 		_update_aim_direction(delta)
 		rotation.y = atan2(-_aim_direction.x, -_aim_direction.z)
 	aim_point = _compute_aim_point()
+	sight_point = _compute_sight_point()
 
 
 ## Направление прицеливания: правый стик (геймпад; на таче его нажимает MobileUI)
@@ -296,6 +305,14 @@ func _update_aim_direction(delta: float) -> void:
 	if to_cursor.length_squared() > 0.000001:
 		_aim_direction = to_cursor.normalized()
 		_aim_distance = maxf(to_cursor.length(), MIN_AIM_DISTANCE)
+
+
+func _compute_sight_point() -> Vector3:
+	if not is_inside_tree():
+		return aim_point
+	var query := PhysicsRayQueryParameters3D.create(get_shot_origin(), aim_point, SIGHT_BLOCKING_MASK, [get_rid()])
+	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	return hit.position if not hit.is_empty() else aim_point
 
 
 func _compute_aim_point() -> Vector3:
@@ -354,17 +371,6 @@ func _update_crouch() -> void:
 		is_crouching = true
 	elif is_crouching and _can_stand_up():
 		is_crouching = false
-
-
-## Прыжок из приседа сначала поднимает игрока (если есть место).
-func stand_up() -> bool:
-	if not is_crouching:
-		return true
-	if not _can_stand_up():
-		return false
-	_crouch_toggled = false
-	is_crouching = false
-	return true
 
 
 func _can_stand_up() -> bool:
