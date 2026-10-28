@@ -113,12 +113,14 @@ func _check_aim() -> void:
 	# Правый стик геймпада задаёт направление и перехватывает прицел у мыши.
 	# Поворот стиком плавный: не скачком за один кадр (дрожь пальца дёргала прицел),
 	# но и не вязкий — за полсекунды доходит.
-	var before: Vector3 = player.get_aim_direction()
+	# Проверяем один кадр заданной длины, а не реальные кадры: в контейнере программный
+	# рендер даёт ~10 FPS, и за два «настоящих» кадра прицел законно доворачивал целиком.
 	_stick(JOY_AXIS_RIGHT_X, 1.0)
-	await process_frame
-	await process_frame
-	_check(player.get_aim_direction().angle_to(Vector3.RIGHT) > 0.2 or before.angle_to(Vector3.RIGHT) < 0.2,
-			"Стик поворачивает прицел скачком")
+	player._aim_direction = Vector3.LEFT
+	var frame := 1.0 / 60.0
+	player._update_aim_direction(frame)
+	var turned: float = player.get_aim_direction().angle_to(Vector3.LEFT)
+	_check(turned > 0.0 and turned <= player.STICK_TURN_SPEED * frame + 0.001, "Стик поворачивает прицел скачком")
 	await create_timer(0.5).timeout
 	_check(player.get_aim_direction().dot(Vector3.RIGHT) > 0.95, "Правый стик не задаёт направление прицела")
 	_stick(JOY_AXIS_RIGHT_X, 0.0)

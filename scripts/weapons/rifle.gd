@@ -246,7 +246,7 @@ func _shoot_effects(origin: Vector3, with_sound: bool = true) -> void:
 		SFXManager.play_shot_at(origin)
 		# Затвор передёргивают после выстрела, пока винтовка ещё «в цикле» (fire_rate).
 		get_tree().create_timer(BOLT_SOUND_DELAY).timeout.connect(func():
-			SFXManager.play_bolt_at(origin)
+			SFXManager.play_bolt_at(origin, _sound_anchor())
 		)
 	if muzzle_flash:
 		muzzle_flash.restart()
@@ -265,7 +265,19 @@ func _shoot_effects(origin: Vector3, with_sound: bool = true) -> void:
 ## Звук перезарядки у всех пиров: позиция приходит в вызове, как и у выстрела.
 @rpc("call_local", "unreliable")
 func _reload_effects(origin: Vector3) -> void:
-	SFXManager.play_reload_at(origin)
+	SFXManager.play_reload_at(origin, _sound_anchor())
+
+
+# Длинные звуки (затвор, перезарядка) едут вместе с винтовкой — убежал, звук не остался
+# позади. Но у стрелка, скрытого туманом войны, позиция не синхронизируется: такой звук
+# стоит в точке, где начался (иначе он шёл бы из последнего известного места).
+func _sound_anchor() -> Node3D:
+	if not is_inside_tree():
+		return null
+	var player := _get_player()
+	if player and "fog_hidden" in player and player.fog_hidden:
+		return null
+	return self
 
 
 ## Один раз показать все эффекты выстрела перед камерой в начале матча (под затемнением):

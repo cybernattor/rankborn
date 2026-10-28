@@ -221,15 +221,24 @@ func _check_shots(world: Node3D, player: CharacterBody3D, rifle: Node3D) -> void
 	_check(sounds.size() == sounds_before + 1 and sounds.back().global_position.distance_to(rifle.muzzle_flash.global_position) < 0.01,
 			"Выстрел не звучит у дула")
 	await create_timer(rifle.BOLT_SOUND_DELAY + 0.1).timeout
-	_check(world.get_children().any(func(n): return n is AudioStreamPlayer3D and n.stream.resource_path.ends_with("rifle_bolt.wav")),
-			"Нет звука затвора")
+	_check(rifle.get_children().any(func(n): return n is AudioStreamPlayer3D and n.stream.resource_path.ends_with("rifle_bolt.wav")),
+			"Звук затвора не едет с винтовкой")
 	rifle.current_ammo = 0
 	rifle.reload()
-	_check(world.get_children().any(func(n): return n is AudioStreamPlayer3D and n.stream.resource_path.ends_with("rifle_reload.wav")),
+	# Звук перезарядки едет с винтовкой: убежал — он не остаётся позади.
+	_check(rifle.get_children().any(func(n): return n is AudioStreamPlayer3D and n.stream.resource_path.ends_with("rifle_reload.wav")),
 			"Нет звука перезарядки")
 	rifle.reload_timer.stop()
 	rifle.is_reloading = false
 	rifle.current_ammo = rifle.magazine_size
+	# У стрелка в тумане войны позиция не синхронизируется — его звук стоит в точке начала.
+	var remote_rifle: Node = world.get_node("Players/7/Head/WeaponPivot/Rifle")
+	var was_hidden: bool = world.get_node("Players/7").fog_hidden
+	world.get_node("Players/7").fog_hidden = true
+	remote_rifle._reload_effects(Vector3(5, 1, 5))
+	_check(_sounds(world, "rifle_reload.wav").any(func(n): return n.global_position.is_equal_approx(Vector3(5, 1, 5))),
+			"Звук скрытого стрелка привязан к его устаревшей позиции")
+	world.get_node("Players/7").fog_hidden = was_hidden
 	player.set_process(true)
 	await process_frame
 	await process_frame
