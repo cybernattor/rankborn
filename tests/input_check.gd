@@ -117,7 +117,13 @@ func _check_aim() -> void:
 	# рендер даёт ~10 FPS, и за два «настоящих» кадра прицел законно доворачивал целиком.
 	_stick(JOY_AXIS_RIGHT_X, 1.0)
 	player._aim_direction = Vector3.LEFT
+	player._stick_aim_active = false
 	var frame := 1.0 / 60.0
+	# Первое отклонение стика ставит прицел сразу в его сторону (на таче иначе он полз от
+	# прошлого направления); плавность нужна, пока стик зажат.
+	player._update_aim_direction(frame)
+	_check(player.get_aim_direction().dot(Vector3.RIGHT) > 0.99, "Первое отклонение стика не ставит прицел сразу")
+	player._aim_direction = Vector3.LEFT
 	player._update_aim_direction(frame)
 	var turned: float = player.get_aim_direction().angle_to(Vector3.LEFT)
 	_check(turned > 0.0 and turned <= player.STICK_TURN_SPEED * frame + 0.001, "Стик поворачивает прицел скачком")

@@ -51,6 +51,8 @@ var sight_point: Vector3 = Vector3.ZERO
 const SIGHT_BLOCKING_MASK := 1
 var _aim_direction := Vector3.FORWARD
 var _aim_distance: float = STICK_AIM_DISTANCE
+## Стик прицела отклонён с прошлого кадра: первое отклонение ставит прицел сразу, дальше поворот плавный.
+var _stick_aim_active: bool = false
 ## Последним прицеливались мышью (иначе — стиком). Переключается тем, чем пошевелили.
 var _mouse_aim: bool = true
 ## Высота выстрела над ногами: от груди, а не от глаз — пуля летит из оружия.
@@ -297,6 +299,13 @@ func _process(delta: float) -> void:
 	vault_available = can_control() and not is_vaulting and not find_vault(_vault_direction()).is_empty()
 
 
+## Рисовать ли прицел и конус разброса. На таче их держит только стик прицела: иначе конус
+## и крестик висят в последнем направлении, и непонятно, целишься ты или нет. С мышью и
+## геймпадом они всегда на виду (курсор и так показывает, куда смотришь).
+func show_aim_indicators() -> bool:
+	return is_aiming or not GameSettings.is_touch_device()
+
+
 ## Направление прицеливания: правый стик (геймпад; на таче его нажимает MobileUI)
 ## или курсор мыши. Камера не вращается, поэтому стик задаёт направление в мире
 ## напрямую: вверх по экрану — это −Z.
@@ -305,15 +314,23 @@ func _update_aim_direction(delta: float) -> void:
 	if stick.length() > STICK_AIM_DEADZONE:
 		_mouse_aim = false
 		var target := Vector3(stick.x, 0.0, stick.y).normalized()
+		var reach := inverse_lerp(STICK_AIM_DEADZONE, 1.0, minf(stick.length(), 1.0))
+		var far := STICK_AIM_DISTANCE_ADS if is_aiming else STICK_AIM_DISTANCE
+		var distance := lerpf(STICK_AIM_MIN_DISTANCE, far, reach)
+		if not _stick_aim_active:
+			# Потянул стик — прицел сразу в той стороне, а не плывёт от прошлого направления
+			# (на таче иначе после паузы приходилось ждать, пока он доползёт).
+			_stick_aim_active = true
+			_aim_direction = target
+			_aim_distance = distance
+			return
 		var angle := _aim_direction.signed_angle_to(target, Vector3.UP)
 		var max_turn := (STICK_TURN_SPEED_ADS if is_aiming else STICK_TURN_SPEED) * delta
 		var turn := clampf(angle * (1.0 - exp(-STICK_TURN_SMOOTHING * delta)), -max_turn, max_turn)
 		_aim_direction = _aim_direction.rotated(Vector3.UP, turn).normalized()
-		var reach := inverse_lerp(STICK_AIM_DEADZONE, 1.0, minf(stick.length(), 1.0))
-		var far := STICK_AIM_DISTANCE_ADS if is_aiming else STICK_AIM_DISTANCE
-		var distance := lerpf(STICK_AIM_MIN_DISTANCE, far, reach)
 		_aim_distance = lerpf(_aim_distance, distance, 1.0 - exp(-STICK_DISTANCE_SMOOTHING * delta))
 		return
+	_stick_aim_active = false
 	# Стик отпущен — прицел остаётся, где был (на таче выстрел происходит в момент отпускания).
 	if not _mouse_aim:
 		return

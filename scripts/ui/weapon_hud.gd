@@ -120,6 +120,7 @@ func _process(delta: float) -> void:
 	elif reload_bar:
 		reload_bar.visible = false
 
+	crosshair.visible = not _player or not _player.has_method("show_aim_indicators") or _player.show_aim_indicators()
 	_update_crosshair_position()
 	# Динамический прицел
 	_update_crosshair_spread(delta)

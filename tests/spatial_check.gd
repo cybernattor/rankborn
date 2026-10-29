@@ -52,6 +52,7 @@ func _run() -> void:
 		var on_ground: Vector3 = player._cursor_on_ground(cursor)
 		_check(on_ground.y > player.ground_height_at(on_ground) - 0.05 and on_ground.y < player.ground_height_at(on_ground) + 0.05, "Курсор не попадает на рельеф")
 		_check(player.camera.unproject_position(on_ground).distance_to(cursor) < 1.0, "Точка под курсором не совпадает с курсором на экране")
+	await _check_stick_aim(player, hud)
 	_check_covers(world)
 	await _check_fog(world, player, remote)
 	await _check_sight_and_steps(world, player, remote)
@@ -130,6 +131,37 @@ func _run() -> void:
 	world.queue_free()
 	await process_frame
 	quit(1 if _failed else 0)
+
+
+## Прицел по стику: первое отклонение ставит его сразу; на таче конус и крестик видны
+## только пока стик прицела зажат (нажат `aim`).
+func _check_stick_aim(player: CharacterBody3D, hud: CanvasLayer) -> void:
+	var settings: Node = root.get_node("GameSettings")
+	var saved_direction: Vector3 = player._aim_direction
+	var cone: AimCone = player.get_node("AimCone")
+	Input.action_press("look_right", 1.0)
+	await process_frame
+	await process_frame
+	_check(player.get_aim_direction().dot(Vector3.RIGHT) > 0.999, "Прицел по стику не встаёт сразу в сторону стика")
+	Input.action_release("look_right")
+	await process_frame
+	_check(not player._stick_aim_active, "Флаг стика не сброшен после отпускания")
+	_check(cone._mesh.get_surface_count() > 0 and hud.crosshair.visible, "На ПК конус и прицел должны быть всегда")
+	settings.force_touch = true
+	await process_frame
+	await process_frame
+	_check(not player.show_aim_indicators() and cone._mesh.get_surface_count() == 0 and not hud.crosshair.visible,
+			"На таче без стика виден конус или прицел")
+	Input.action_press("aim")
+	await process_frame
+	await process_frame
+	_check(player.show_aim_indicators() and cone._mesh.get_surface_count() > 0 and hud.crosshair.visible,
+			"На таче со стиком нет конуса или прицела")
+	Input.action_release("aim")
+	settings.force_touch = false
+	await process_frame
+	await process_frame
+	player._aim_direction = saved_direction
 
 
 func _load_world() -> Node3D:

@@ -32,7 +32,7 @@ func _ready() -> void:
 
 func _process(_delta: float) -> void:
 	_mesh.clear_surfaces()
-	if not player or not player.can_control():
+	if not player or not player.can_control() or not player.show_aim_indicators():
 		return
 	var weapon: Node = player.weapon_manager.get_current_weapon()
 	if not weapon or not weapon.has_method("get_spread_angle"):
