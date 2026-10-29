@@ -1,12 +1,10 @@
 # Сборка Android APK на сервере GitHub: тестерам не нужно ничего собирать самим.
-# Каждый пуш в main прогоняет проверки и публикует APK как релиз «build-N»;
-# вручную: вкладка Actions → «Android APK» → Run workflow.
+# Запускается ТОЛЬКО вручную (вкладка Actions → «Android APK» → Run workflow): минуты Actions
+# в приватном репозитории ограничены, автозапуск на каждый пуш их тратил бы без спроса.
+# Прогоняет проверки и публикует APK как релиз «build-N».
 name: Android APK
 
 on:
-  push:
-    branches: [main]
-    paths-ignore: ["docs/**", "**.md"]
   workflow_dispatch:
 
 permissions:
