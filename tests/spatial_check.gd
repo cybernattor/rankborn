@@ -157,6 +157,33 @@ func _check_stick_aim(player: CharacterBody3D, hud: CanvasLayer) -> void:
 	await process_frame
 	_check(player.show_aim_indicators() and cone._mesh.get_surface_count() > 0 and hud.crosshair.visible,
 			"На таче со стиком нет конуса или прицела")
+	# Стик не зажат: солдат разворачивается по ходу движения, камера без сдвига вперёд.
+	Input.action_release("aim")
+	await process_frame
+	player._aim_direction = Vector3.LEFT
+	player._aim_distance = 11.0
+	Input.action_press("move_forward", 1.0)
+	for i in 40:
+		await process_frame
+	_check(player.get_aim_direction().dot(Vector3.FORWARD) > 0.95, "Без стика прицела солдат не поворачивается по ходу движения")
+	_check(player.camera._desired_focus().distance_to(player.global_position) < 0.01, "Камера сдвинута вперёд без стика прицела")
+	Input.action_release("move_forward")
+	var held: Vector3 = player.get_aim_direction()
+	Input.action_press("move_right", 1.0)
+	Input.action_press("aim")
+	await process_frame
+	await process_frame
+	_check(player.get_aim_direction().is_equal_approx(held), "Прицеливание (выстрел ждёт) разворачивается по ходу движения")
+	Input.action_release("aim")
+	Input.action_release("move_right")
+	await process_frame
+	Input.action_press("look_right", 1.0)
+	await process_frame
+	await process_frame
+	_check(player.camera._desired_focus().distance_to(player.global_position) > 1.0, "Камера не идёт вперёд при зажатом стике")
+	Input.action_release("look_right")
+	Input.action_press("aim")
+	await process_frame
 	# Выстрел ждёт затвор, стик уже отпущен: конус не сужается после отпускания.
 	player.aim_progress = 0.2
 	player.aim_frozen = true

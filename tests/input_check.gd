@@ -175,12 +175,16 @@ func _check_movement() -> void:
 	await _hold("move_forward", 30)
 	_check(is_equal_approx(_horizontal_speed(), PlayerState.SPEED), "Ходьба не выходит на скорость")
 	_check(_horizontal_velocity().normalized().dot(Vector3.FORWARD) > 0.99, "Движение зависит от того, куда смотрит персонаж")
-	# Спринт — только туда, куда смотришь.
+	# Спринт — только туда, куда смотришь: пока стик прицела держит взгляд вбок, боком не бежим.
+	_stick(JOY_AXIS_RIGHT_X, 1.0)
 	await _hold("sprint", 30)
 	_check(is_equal_approx(_horizontal_speed(), PlayerState.SPEED), "Спринт боком работает")
-	_aim_towards(Vector3.FORWARD)
-	await _hold("sprint", 30)
+	Input.action_release("sprint")
+	# Стик отпущен — солдат сам разворачивается по ходу бега, и спринт включается.
+	_stick(JOY_AXIS_RIGHT_X, 0.0)
+	await _hold("sprint", 40)
 	_check(is_equal_approx(_horizontal_speed(), PlayerState.SPRINT_SPEED), "Спринт не работает")
+	_check(player.get_aim_direction().dot(Vector3.FORWARD) > 0.95, "Без стика прицела солдат не смотрит по ходу бега")
 	Input.action_release("sprint")
 	# С зажатым прицелом идут медленно, как в Foxhole.
 	await _hold("aim", 40)

@@ -334,8 +334,11 @@ func _update_aim_direction(delta: float) -> void:
 		_aim_distance = lerpf(_aim_distance, distance, 1.0 - exp(-STICK_DISTANCE_SMOOTHING * delta))
 		return
 	_stick_aim_active = false
-	# Стик отпущен — прицел остаётся, где был (на таче выстрел происходит в момент отпускания).
+	# Стик отпущен. На таче и геймпаде солдат смотрит по ходу движения (иначе он «залипал»
+	# в старом направлении: бег боком, спринт не включается, FIRE стреляет не туда).
+	# Пока выстрел ждёт затвор (aim ещё нажат), направление держим — он уйдёт туда, куда целились.
 	if not _mouse_aim:
+		_face_movement(delta)
 		return
 	var cursor := get_viewport().get_mouse_position()
 	# Прицел лежит на земле, поэтому и мёртвая зона — вокруг ног солдата на экране.
@@ -346,6 +349,27 @@ func _update_aim_direction(delta: float) -> void:
 	if to_cursor.length_squared() > 0.000001:
 		_aim_direction = to_cursor.normalized()
 		_aim_distance = maxf(to_cursor.length(), MIN_AIM_DISTANCE)
+
+
+## Плавно поворачивает прицел по направлению ходьбы; стоим — остаётся как был.
+func _face_movement(delta: float) -> void:
+	if is_aiming or aim_frozen:
+		return
+	var move := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+	if move.length() < 0.1:
+		return
+	var target := Vector3(move.x, 0.0, move.y).normalized()
+	var angle := _aim_direction.signed_angle_to(target, Vector3.UP)
+	var max_turn := STICK_TURN_SPEED * delta
+	var turn := clampf(angle * (1.0 - exp(-STICK_TURN_SMOOTHING * delta)), -max_turn, max_turn)
+	_aim_direction = _aim_direction.rotated(Vector3.UP, turn).normalized()
+	_aim_distance = lerpf(_aim_distance, STICK_AIM_DISTANCE, 1.0 - exp(-STICK_DISTANCE_SMOOTHING * delta))
+
+
+## Игрок сейчас целится стиком: он зажат или выстрел ещё ждёт затвор. Камера сдвигается
+## вперёд только тогда — иначе солдат вечно стоял сбоку экрана.
+func has_aim_input() -> bool:
+	return _stick_aim_active or is_aiming
 
 
 ## Точка земли под курсором. Луч камеры пересекается с самим рельефом, а не с плоскостью
