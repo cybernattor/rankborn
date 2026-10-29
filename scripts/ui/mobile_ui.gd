@@ -166,6 +166,7 @@ func _on_touch_down(index: int, pos: Vector2) -> void:
 		_aim_index = index
 		_aim_origin = pos
 		_set_aim(Vector2.ZERO)
+		_freeze_aim(false)
 		Input.action_press("aim")
 	queue_redraw()
 
@@ -232,7 +233,10 @@ func _set_aim(vec: Vector2) -> void:
 
 
 # Прицел держим зажатым до выстрела: иначе в момент выстрела разброс уже снова от бедра.
+# Но сведение при этом замораживаем: пока выстрел ждёт затвор (до SHOT_MAX_WAIT), конус
+# не должен сужаться после того, как палец уже убран.
 func _start_pending_shot() -> void:
+	_freeze_aim(true)
 	_pending_shot = true
 	_pending_time = 0.0
 	_pending_ammo = _current_ammo()
@@ -246,6 +250,11 @@ func _update_pending_shot(delta: float) -> void:
 	var cannot := weapon == null or weapon.is_reloading or weapon.current_ammo <= 0
 	if (_pending_time >= SHOT_HOLD and (fired or cannot)) or _pending_time >= SHOT_MAX_WAIT:
 		_finish_pending_shot()
+
+
+func _freeze_aim(frozen: bool) -> void:
+	if player:
+		player.aim_frozen = frozen
 
 
 func _finish_pending_shot() -> void:
@@ -307,6 +316,7 @@ func _release_all() -> void:
 	Input.action_release("shoot")
 	Input.action_release("aim")
 	_pending_shot = false
+	_freeze_aim(false)
 	_stick_vector = Vector2.ZERO
 	_aim_vector = Vector2.ZERO
 	queue_redraw()

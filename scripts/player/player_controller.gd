@@ -35,6 +35,9 @@ const EARS_HEIGHT := 1.6
 # прицел — после него снова надо довести.
 var is_aiming: bool = false
 var aim_progress: float = 0.0
+## Сведение прицела заморожено: на таче стик уже отпущен, выстрел ждёт готовности затвора.
+## Конус не сужается дальше — выстрел уходит с тем разбросом, который игрок видел при отпускании.
+var aim_frozen: bool = false
 const AIM_TIME := 0.8
 ## На ходу прицел сводится медленнее.
 const AIM_MOVING_RATE := 0.4
@@ -441,6 +444,9 @@ func ground_height_at(point: Vector3) -> float:
 func _update_aim_progress(delta: float) -> void:
 	if not is_aiming:
 		aim_progress = 0.0
+		aim_frozen = false
+		return
+	if aim_frozen:
 		return
 	var moving := Vector2(velocity.x, velocity.z).length() > AIM_MOVING_SPEED
 	var rate := (AIM_MOVING_RATE if moving else 1.0) / AIM_TIME

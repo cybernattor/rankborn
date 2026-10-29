@@ -157,7 +157,19 @@ func _check_stick_aim(player: CharacterBody3D, hud: CanvasLayer) -> void:
 	await process_frame
 	_check(player.show_aim_indicators() and cone._mesh.get_surface_count() > 0 and hud.crosshair.visible,
 			"На таче со стиком нет конуса или прицела")
+	# Выстрел ждёт затвор, стик уже отпущен: конус не сужается после отпускания.
+	player.aim_progress = 0.2
+	player.aim_frozen = true
+	for i in 10:
+		await process_frame
+	_check(is_equal_approx(player.aim_progress, 0.2), "Конус сужается после отпускания стика")
+	player.aim_frozen = false
+	for i in 5:
+		await process_frame
+	_check(player.aim_progress > 0.2, "Сведение прицела не продолжается после разморозки")
 	Input.action_release("aim")
+	await process_frame
+	_check(not player.aim_frozen and player.aim_progress == 0.0, "Заморозка не сбрасывается вместе с прицеливанием")
 	settings.force_touch = false
 	await process_frame
 	await process_frame
