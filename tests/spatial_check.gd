@@ -3,6 +3,11 @@ extends SceneTree
 ## Запуск: Godot --headless --path . --log-file .godot/spatial-check.log --script tests/spatial_check.gd
 ## Сеть: два процесса с дополнительными аргументами -- host и -- client.
 
+## Значения Rifle.Surface: класс Rifle в --script недоступен (автозагрузки ещё не созданы при разборе).
+const SURFACE_DIRT := 0
+const SURFACE_SAND := 1
+const SURFACE_STONE := 2
+
 var _failed: bool = false
 var _deadline: int = Time.get_ticks_msec() + 25000
 
@@ -135,6 +140,10 @@ func _run() -> void:
 
 ## Прицел по стику: первое отклонение ставит его сразу; на таче конус и крестик видны
 ## только пока стик прицела зажат (нажат `aim`).
+func ear_probe_from(player: CharacterBody3D) -> Vector3:
+	return player.global_position + Vector3.UP * 1.5
+
+
 func _check_stick_aim(player: CharacterBody3D, hud: CanvasLayer) -> void:
 	var settings: Node = root.get_node("GameSettings")
 	var saved_direction: Vector3 = player._aim_direction
@@ -307,6 +316,24 @@ func _check_shots(world: Node3D, player: CharacterBody3D, rifle: Node3D) -> void
 	_check(rifle.get_children().any(func(n): return n is AudioStreamPlayer3D and n.stream.resource_path.ends_with("rifle_bolt.wav")),
 			"Звук затвора не едет с винтовкой")
 	# Попадания и свист: прогрев беззвучен, пуля мимо слушателя свистит, своя и попавшая в него — нет.
+	# Эффекты эпохи: у винтовки нет трассера; грунт и песок — комья и пыль без искр,
+	# искры только на камне; света при попадании нет; у дула дым, при затворе — гильза.
+	var effects_root: Node = world
+	var kids_before := effects_root.get_child_count()
+	rifle._spawn_tracer(ear_probe_from(player), ear_probe_from(player) + Vector3(5, 0, 0), false, false)
+	_check(effects_root.get_child_count() == kids_before, "Трассер рисуется без draw")
+	_check(rifle.tracer_every == 0, "У винтовки должен быть выключен трассер")
+	for surface: int in [SURFACE_DIRT, SURFACE_SAND, SURFACE_STONE]:
+		var before := effects_root.get_children().filter(func(n): return n is GPUParticles3D).size()
+		rifle._spawn_impact(Vector3(3, 0, 3), Vector3.UP, false, surface)
+		var bursts := effects_root.get_children().filter(func(n): return n is GPUParticles3D).slice(before)
+		var sparks := bursts.filter(func(n): return n.draw_pass_1.material.emission_enabled)
+		_check((sparks.size() == 1) == (surface == SURFACE_STONE), "Искры не там: поверхность %d" % surface)
+		_check(effects_root.get_children().filter(func(n): return n is OmniLight3D and n.light_energy > 0.0 and n.omni_range < 2.0).is_empty(), "Попадание вспыхивает светом")
+	rifle._shoot_effects(rifle.muzzle_flash.global_position)
+	_check(rifle._muzzle_smoke.emitting, "Нет дыма у дула")
+	var covers_surfaces := world.get_node("Covers").get_children().map(func(n): return n.get_meta("surface", -1))
+	_check(SURFACE_SAND in covers_surfaces and SURFACE_STONE in covers_surfaces and not -1 in covers_surfaces, "Укрытия не сообщают материал")
 	var hit_before := _sounds(world, "hit_flesh.wav").size() + _sounds(world, "hit_dirt.wav").size() + _sounds(world, "hit_hard.wav").size()
 	rifle._spawn_impact(Vector3(2, 0, 2), Vector3.UP, false)
 	_check(_sounds(world, "hit_dirt.wav").size() + _sounds(world, "hit_flesh.wav").size() + _sounds(world, "hit_hard.wav").size() == hit_before, "Прогрев играет звук попадания")

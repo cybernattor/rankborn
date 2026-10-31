@@ -155,6 +155,8 @@ func _build_covers() -> void:
 		size.y = top - bottom
 		var body := StaticBody3D.new()
 		body.collision_layer = 1
+		# Материал для эффектов попадания: мешки — песок, остальное — камень.
+		body.set_meta("surface", Rifle.Surface.SAND if spec.color == COVER_SANDBAG else Rifle.Surface.STONE)
 		body.transform = Transform3D(basis, Vector3(spec.pos.x, (bottom + top) * 0.5, spec.pos.y))
 		var shape := CollisionShape3D.new()
 		var box := BoxShape3D.new()
