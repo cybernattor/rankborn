@@ -100,3 +100,7 @@ rankborn/
 ## Лицензия
 
 GNU Affero General Public License v3.0 (AGPL-3.0-only) — см. файл [LICENSE](LICENSE).
+
+### Сторонние компоненты
+
+- `addons/godot_mcp` — [godot-mcp-bridge](https://github.com/TomasLucasUTN/godot-mcp-bridge) (Tomas Lucas, форк [tomyud1/godot-mcp](https://github.com/tomyud1/godot-mcp) авторства Tomer Yud), MIT. Только для разработки, в сборки не входит. Подробности и лицензия — `addons/godot_mcp/README.md`.
