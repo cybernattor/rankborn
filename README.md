@@ -99,4 +99,4 @@ rankborn/
 
 ## Лицензия
 
-MIT License
+GNU Affero General Public License v3.0 (AGPL-3.0-only) — см. файл [LICENSE](LICENSE).
