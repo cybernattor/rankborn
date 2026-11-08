@@ -170,6 +170,8 @@ func _init_tools() -> void:
 		&"analyze_signal_flow": [_analysis_tools, &"analyze_signal_flow"],
 		&"validate_references": [_analysis_tools, &"validate_references"],
 		&"compare_screenshots": [_analysis_tools, &"compare_screenshots"],
+		&"texture_info": [_analysis_tools, &"texture_info"],
+		&"analyze_2d_layout": [_analysis_tools, &"analyze_2d_layout"],
 		&"scene_diff": [_analysis_tools, &"scene_diff"],
 		&"disconnect_signal": [_scene_tools, &"disconnect_signal"],
 		&"duplicate_node": [_scene_tools, &"duplicate_node"],
@@ -397,6 +399,8 @@ const _DESTRUCTIVE_TOOLS := {
 	"duplicate_node": true, "set_anchor_preset": true,
 	"tilemap_set_cell": true, "tilemap_fill_rect": true, "tilemap_clear": true,
 	"tilemap_set_terrain_cells": true, "tilemap_autotile": true,
+	"create_sprite_animation": true, "create_sprite_frames": true, "add_bone": true, "set_bone_pose": true,
+	"mp_set_authority": true, "save_scene": true,
 	"create_animation": true, "add_animation_track": true, "set_animation_keyframe": true,
 	"remove_animation": true,
 	"add_audio_player": true, "add_audio_bus": true,
@@ -503,6 +507,28 @@ func execute_tool(tool_name: String, args: Dictionary) -> Dictionary:
 		return {&"ok": false, &"error": "Tool handler not found: %s.%s" % [node.name, method]}
 
 	_parse_stringified_args(args)
+
+	# dry_run is honoured centrally, not per tool. Every scene mutation in this
+	# addon writes through SceneToolBase._save_scene / _finish_scene_edit, so
+	# setting the flag on the handler for the duration of the call makes the
+	# whole family preview correctly — including tools written after this. The
+	# handler still does its real work, on a copy loaded from disk; what the
+	# flag removes is the write at the end and any chance of touching the open
+	# scene. Cleared in every exit path below, or the next caller silently gets
+	# a preview instead of an edit.
+	var dry_run := bool(args.get(&"dry_run", false))
+	# Checked by property rather than `is SceneToolBase`: a global class_name is
+	# only registered when the editor has scanned the project, so the typed
+	# version parses fine in the editor and turns tool_executor.gd into a broken
+	# script the moment it is loaded standalone — which is exactly how the
+	# headless suite loads it.
+	if "_scene_mutating" in node:
+		node._scene_mutating = _DESTRUCTIVE_TOOLS.has(tool_name)
+	var previews := dry_run and ("_dry_run" in node)
+	if previews:
+		node._dry_run = true
+		node._dry_run_skipped_write = false
+
 	var result: Variant
 	if _COROUTINE_TOOLS.has(tool_name):
 		# Direct method dispatch for coroutine tools so `await` returns the
@@ -520,12 +546,34 @@ func execute_tool(tool_name: String, args: Dictionary) -> Dictionary:
 	else:
 		result = node.call(method, args)
 
+	if "_scene_mutating" in node:
+		node._scene_mutating = true
+	var skipped_write: bool = previews and node._dry_run_skipped_write
+	if previews:
+		node._dry_run = false
+		node._dry_run_skipped_write = false
+
 	if result == null or not (result is Dictionary):
 		push_error("[MCP] Tool '%s' returned invalid result: %s" % [tool_name, str(result)])
 		return {&"ok": false, &"error": "Tool '%s' returned null or non-Dictionary (possible crash — check Godot console)" % tool_name}
 	if not result.has(&"ok"):
 		result[&"ok"] = false
 		result[&"error"] = result.get(&"error", "Tool returned no status")
+
+	# Say it plainly in the answer. A preview that reads like a completed edit
+	# is worse than no preview: the agent believes the change landed.
+	# Two shapes reach here. Most tools do their work and get stopped at the
+	# write by the base class (skipped_write). A handful predate this and answer
+	# with their own preview dict, which sets dry_run but knows nothing about
+	# `written`; both must look identical to a caller.
+	if (skipped_write or (dry_run and result.get(&"dry_run", false) == true)) and result.get(&"ok", false):
+		result[&"dry_run"] = true
+		result[&"written"] = false
+		result[&"message"] = "%s Nothing was written — this was a dry run. Call again without dry_run to apply it." % str(result.get(&"message", "Preview only."))
+	elif dry_run and not previews and result.get(&"ok", false) and not result.has(&"dry_run"):
+		# The tool took dry_run as an ordinary argument and did whatever it does
+		# with it; do not claim a guarantee this layer did not provide.
+		pass
 	return result
 
 ## Run a sequence of tool calls in a single request, cutting N WebSocket

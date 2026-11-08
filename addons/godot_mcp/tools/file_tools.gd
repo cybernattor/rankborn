@@ -4,10 +4,19 @@ class_name FileTools
 ## File operation tools for MCP.
 ## Handles: list_dir, read_file, search_project, create_script
 
+## See ScriptTools: set by the ToolExecutor for one call when the caller passed
+## dry_run, honoured at the write below.
+var _dry_run := false
+var _dry_run_skipped_write := false
+
 const PathGuard = preload("res://addons/godot_mcp/utils/path_guard.gd")
 
 const DEFAULT_MAX_BYTES := 200_000
-const DEFAULT_MAX_RESULTS := 200
+const DEFAULT_MAX_RESULTS := 50
+## A matched line is shown, not the file, so a single generated or minified
+## line must not be able to dominate the answer. Long lines are cut here and
+## say so.
+const MAX_MATCH_CHARS := 200
 const MAX_TRAVERSAL_DEPTH := 20
 const _SKIP_EXTENSIONS: Dictionary = {
 	".import": true, ".png": true, ".jpg": true, ".jpeg": true,
@@ -183,6 +192,7 @@ func search_project(args: Dictionary) -> Dictionary:
 	var glob_filter: String = str(args.get(&"glob", ""))
 	var max_results: int = int(args.get(&"max_results", DEFAULT_MAX_RESULTS))
 	var case_sensitive: bool = bool(args.get(&"case_sensitive", false))
+	var include_addons: bool = bool(args.get(&"include_addons", false))
 
 	if query.strip_edges().is_empty():
 		return {&"ok": false, &"error": "Missing 'query' parameter"}
@@ -190,10 +200,22 @@ func search_project(args: Dictionary) -> Dictionary:
 	var search_query := query if case_sensitive else query.to_lower()
 	var files := _collect_files("res://", glob_filter)
 	var matches: Array = []
+	var addon_hits := 0
 
 	for file_path: String in files:
 		if matches.size() >= max_results:
 			break
+		# Third-party addon source answers almost every common identifier, and
+		# it is never what the caller meant — the hits crowd out the project's
+		# own code and cost context to read. Same default as validate_references.
+		if not include_addons and file_path.begins_with("res://addons/"):
+			addon_hits += 1
+			continue
+		# delete_file leaves a .bak beside what it removed. Searching it back up
+		# hands the caller the contents of a file they just deleted, as though it
+		# were still part of the project.
+		if file_path.ends_with(".bak"):
+			continue
 
 		var file := FileAccess.open(file_path, FileAccess.READ)
 		if file == null:
@@ -211,21 +233,37 @@ func search_project(args: Dictionary) -> Dictionary:
 			var line := lines[i]
 			var search_line := line if case_sensitive else line.to_lower()
 			if search_line.find(search_query) != -1:
+				var content_line := line.strip_edges()
+				var cut := content_line.length() > MAX_MATCH_CHARS
 				matches.append({
 					&"file": file_path,
 					&"line": i + 1,
-					&"content": line.strip_edges()
+					&"content": content_line.substr(0, MAX_MATCH_CHARS) if cut else content_line,
+					&"content_truncated": cut,
 				})
 				if matches.size() >= max_results:
 					break
 
-	return {
+	# When the scan stops early there is no honest total to give: it stopped
+	# looking. Reporting matches.size() as "total_matches" said 50 whether the
+	# project held 51 or 20,000, which is a number that reads as measured and
+	# was not. The count is only reported when it IS the count.
+	var truncated := matches.size() >= max_results
+	var out := {
 		&"ok": true,
 		&"query": query,
 		&"matches": matches,
-		&"total_matches": matches.size(),
-		&"truncated": matches.size() >= max_results
+		&"returned": matches.size(),
+		&"truncated": truncated,
 	}
+	if truncated:
+		out[&"note"] = "Stopped at max_results (%d), so this is not how many matches exist. Narrow the query, pass a glob, or raise max_results." % max_results
+	else:
+		out[&"total_matches"] = matches.size()
+	if addon_hits > 0:
+		out[&"skipped_addon_files"] = addon_hits
+		out[&"addons_note"] = "Skipped %d file(s) under res://addons/. Pass include_addons: true to search them." % addon_hits
+	return out
 
 func _collect_files(path: String, glob_filter: String) -> PackedStringArray:
 	"""Recursively collect all searchable files."""
@@ -299,23 +337,24 @@ func create_script(args: Dictionary) -> Dictionary:
 	if FileAccess.file_exists(path):
 		return {&"ok": false, &"error": "File already exists: " + path}
 
-	# Ensure parent directory exists
-	var dir_path := path.get_base_dir()
-	if not DirAccess.dir_exists_absolute(dir_path):
-		var err := DirAccess.make_dir_recursive_absolute(dir_path)
-		if err != OK:
-			return {&"ok": false, &"error": "Could not create directory: " + dir_path}
+	if _dry_run:
+		_dry_run_skipped_write = true
+	else:
+		var dir_path := path.get_base_dir()
+		if not DirAccess.dir_exists_absolute(dir_path):
+			var err := DirAccess.make_dir_recursive_absolute(dir_path)
+			if err != OK:
+				return {&"ok": false, &"error": "Could not create directory: " + dir_path}
 
-	# Write file
-	var file := FileAccess.open(path, FileAccess.WRITE)
-	if file == null:
-		return {&"ok": false, &"error": "Could not create file: " + path}
+		var file := FileAccess.open(path, FileAccess.WRITE)
+		if file == null:
+			return {&"ok": false, &"error": "Could not create file: " + path}
 
-	file.store_string(content)
-	file.close()
+		file.store_string(content)
+		file.close()
 
-	# Refresh filesystem so Godot sees the new file
-	_refresh_filesystem()
+		# Refresh filesystem so Godot sees the new file
+		_refresh_filesystem()
 
 	return {
 		&"ok": true,

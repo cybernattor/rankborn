@@ -41,7 +41,7 @@ func mp_add_spawner(args: Dictionary) -> Dictionary:
 	var validated: Array = []
 	for s in spawnable_scenes:
 		var p: String = _ensure_res_path(str(s))
-		if p == "res://__mcp_rejected_path__":
+		if PathGuard.is_bad(p):
 			return {&"ok": false, &"error": "Spawnable scene path escapes the project sandbox: " + str(s)}
 		if not ResourceLoader.exists(p):
 			return {&"ok": false, &"error": "Spawnable scene not found: " + p}
@@ -189,6 +189,10 @@ func mp_wire_rpc(args: Dictionary) -> Dictionary:
 
 	if script_path.strip_edges() == "res://":
 		return {&"ok": false, &"error": "Missing 'script_path'"}
+	if PathGuard.is_bad(script_path):
+		return PathGuard.error_for(script_path, "script_path")
+	if script_path.get_extension().to_lower() != "gd":
+		return {&"ok": false, &"error": "mp_wire_rpc only accepts .gd scripts: " + script_path}
 	if method.is_empty():
 		return {&"ok": false, &"error": "Missing 'method'"}
 	if not method.is_valid_identifier():
@@ -577,6 +581,10 @@ func mp_set_authority(args: Dictionary) -> Dictionary:
 
 	if script_path.strip_edges() == "res://":
 		return {&"ok": false, &"error": "Missing 'script_path' (the script that should claim authority)"}
+	if PathGuard.is_bad(script_path):
+		return PathGuard.error_for(script_path, "script_path")
+	if script_path.get_extension().to_lower() != "gd":
+		return {&"ok": false, &"error": "mp_set_authority only accepts .gd scripts: " + script_path}
 	if not FileAccess.file_exists(script_path):
 		return {&"ok": false, &"error": "Script not found: " + script_path}
 	if peer_id == null:
@@ -640,6 +648,22 @@ func _ready() -> void:
 		return {&"ok": false, &"error": "Could not write " + script_path}
 	w.store_string(new_source)
 	w.close()
+
+	# `node` is an EXPRESSION, and a wrong one only shows up as a parse error in
+	# a file this tool just rewrote — the call answering ok with the script left
+	# broken. Check what was written and put the original back if it does not
+	# compile: a tool must not hand back a file that no longer parses.
+	var check := GDScript.new()
+	check.source_code = new_source
+	if check.reload() != OK:
+		var restore := FileAccess.open(script_path, FileAccess.WRITE)
+		if restore != null:
+			restore.store_string(source)
+			restore.close()
+		_refresh_filesystem()
+		return {&"ok": false,
+			&"error": "The generated code does not compile, so %s was left unchanged. `node` is an expression, not a node name: pass \"self\", or \"$%s\" to reach a child." % [script_path, node_expr],
+			&"node": node_expr}
 	_refresh_filesystem()
 
 	return {

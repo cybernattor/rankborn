@@ -39,6 +39,19 @@ func set_mcp_client(client: Object) -> void:
 # uptime and detect "started but immediately crashed" cases.
 var _last_run_scene_started_at_ms: int = 0
 var _last_run_scene_target: String = ""
+## PID of a game launched with attach_debugger=false, so stop_scene can end it.
+## EditorInterface knows nothing about that process — it is not "playing" as far
+## as the editor is concerned.
+var _detached_pid: int = -1
+
+## Where the detached game's pid outlives this editor session.
+##
+## restart_editor (and any crash) resets _detached_pid to -1 while the game it
+## named keeps running: run_scene then starts a second one, stop_scene can no
+## longer reach the first, and every runtime tool talks to whichever helper
+## connected — usually the orphan. Writing the pid down makes the next session
+## able to adopt it.
+const _DETACHED_PID_FILE := "user://mcp_detached_pid.txt"
 
 # Cached reference to the editor Output panel's RichTextLabel.
 var _editor_log_rtl: RichTextLabel = null
@@ -235,6 +248,7 @@ func set_main_scene(args: Dictionary) -> Dictionary:
 # =============================================================================
 func get_input_map(args: Dictionary) -> Dictionary:
 	var include_deadzones: bool = bool(args.get(&"include_deadzones", true))
+	var include_builtin: bool = bool(args.get(&"include_builtin", false))
 
 	# Merge action names from both sources:
 	# - InputMap.get_actions() covers built-ins (ui_*, spatial_editor/*, etc.)
@@ -253,8 +267,22 @@ func get_input_map(args: Dictionary) -> Dictionary:
 	sorted_names.sort()
 
 	var result: Dictionary = {}
+	var builtin_skipped := 0
 	for action_name: String in sorted_names:
 		var ps_key: String = "input/" + action_name
+		# The editor's InputMap carries every action the EDITOR uses — the whole
+		# ui_* set plus spatial_editor/* and friends. Measured on a project with
+		# one action of its own, they were 14,137 of the 14,300 characters this
+		# returned, on every call.
+		#
+		# Filtered by namespace rather than by ProjectSettings: the engine
+		# registers its ui_* defaults as project settings too, so has_setting()
+		# is true for them and cannot tell them apart. ui_* and anything with a
+		# "/" are the engine's reserved namespaces; what is left is what the
+		# game author wrote.
+		if not include_builtin and (action_name.begins_with("ui_") or "/" in action_name):
+			builtin_skipped += 1
+			continue
 		var events: Array = []
 		var deadzone: float = 0.5
 
@@ -279,7 +307,11 @@ func get_input_map(args: Dictionary) -> Dictionary:
 			action_data[&"deadzone"] = deadzone
 		result[action_name] = action_data
 
-	return {&"ok": true, &"actions": result, &"count": result.size()}
+	var out := {&"ok": true, &"actions": result, &"count": result.size()}
+	if builtin_skipped > 0:
+		out[&"builtin_skipped"] = builtin_skipped
+		out[&"note"] = "%d engine/editor action(s) (ui_*, spatial_editor/*, ...) omitted — they are not defined by this project. Pass include_builtin: true for the full map." % builtin_skipped
+	return out
 
 func _describe_input_event(e: InputEvent) -> Dictionary:
 	var item := {&"type": e.get_class()}
@@ -391,6 +423,16 @@ func _input_map_set(action: String, args: Dictionary) -> Dictionary:
 	_save_and_refresh_settings()
 	_try_refresh_input_map_ui()
 
+	# Every event rejected means the action exists and is bound to nothing: the
+	# game reads it as never pressed, and answering ok let that pass for a
+	# working binding. Some events through is a partial success and stays ok.
+	if added_events.is_empty() and not event_errors.is_empty():
+		return {
+			&"ok": false,
+			&"error": "Action '%s' was created but none of its %d event(s) could be built, so it is bound to nothing and will never fire." % [action, event_errors.size()],
+			&"event_errors": event_errors,
+		}
+
 	var out: Dictionary = {&"ok": true, &"message": "Set action '%s' with %d event(s)" % [action, added_events.size()], &"events": added_events}
 	if event_errors.size() > 0:
 		out[&"event_errors"] = event_errors
@@ -401,10 +443,20 @@ func _create_input_event(desc: Dictionary) -> Dictionary:
 
 	match type:
 		"key":
+			var event := InputEventKey.new()
+			# get_input_map REPORTS events as {"type":"InputEventKey","keycode":83},
+			# so handing one straight back was the obvious move and the only
+			# accepted form was the key NAME — the tool did not take its own
+			# output. Both work now.
+			if desc.has(&"keycode"):
+				var numeric := int(desc.get(&"keycode", 0))
+				if numeric == 0:
+					return {&"error": "Invalid 'keycode' for key event (0 is not a key)"}
+				event.physical_keycode = numeric
+				return {&"event": event}
 			var key_string: String = str(desc.get(&"key", ""))
 			if key_string.is_empty():
-				return {&"error": "Missing 'key' for key event"}
-			var event := InputEventKey.new()
+				return {&"error": "Missing 'key' for key event — a key name like \"Space\" or \"A\", or a numeric 'keycode'"}
 			var keycode := OS.find_keycode_from_string(key_string)
 			if keycode == 0:
 				return {&"error": "Unknown key: " + key_string}
@@ -623,6 +675,10 @@ func get_node_properties(args: Dictionary) -> Dictionary:
 	if not ClassDB.class_exists(node_type):
 		return {&"ok": false, &"error": "Unknown node type: " + node_type}
 
+	if node_type != "Node" and not ClassDB.is_parent_class(node_type, "Node"):
+		return {&"ok": false, &"error": "Expected a Node class; use classdb_query for non-Node types: " + node_type}
+	if not ClassDB.can_instantiate(node_type):
+		return {&"ok": false, &"error": "Cannot instantiate abstract Node class: " + node_type}
 	var temp = ClassDB.instantiate(node_type)
 	if not temp:
 		return {&"ok": false, &"error": "Cannot instantiate: " + node_type}
@@ -895,8 +951,16 @@ func get_errors(args: Dictionary) -> Dictionary:
 
 	var start := maxi(0, all_errors.size() - max_errors)
 	var errors := all_errors.slice(start)
-	return {&"ok": true, &"errors": errors, &"error_count": errors.size(),
+	var out := {&"ok": true, &"errors": errors, &"error_count": errors.size(),
 		&"summary": "%d error(s) found" % errors.size()}
+	# Say what the Debugger > Errors read actually saw whenever it contributed
+	# nothing. "0 errors" and "could not find the panel" are different answers
+	# and used to look identical from the outside (issue #4).
+	if dbg_errors.is_empty():
+		out[&"debugger_panel"] = _error_tree_diag if not _error_tree_diag.is_empty() else {
+			&"matched_by": "not searched (no editor plugin)",
+		}
+	return out
 
 func _extract_file_line(text: String) -> Dictionary:
 	var idx := text.find("res://")
@@ -992,32 +1056,86 @@ func _read_debugger_errors(include_warnings: bool) -> Array:
 
 	return errors
 
+## How many debugger trees the last lookup saw, and which one it took. Reported
+## in get_errors' payload so a "returns 0" report answers itself instead of
+## needing a session to reproduce (issue #4).
+var _error_tree_diag: Dictionary = {}
+
+## Find the Debugger > Errors tree.
+##
+## Identified by CONTENT, not by node name. The old version walked up from each
+## Tree looking for "Error" in an ancestor's name and, failing that, took
+## `candidates[0]` — whichever Tree happened to come first under the debugger,
+## which could be the profiler's, the monitors' or the stack list. It then
+## cached that choice permanently, so one wrong pick meant `error_count: 0`
+## forever with a panel full of errors. Godot stamps `_is_error` / `_is_warning`
+## on the rows it builds in this panel (script_editor_debugger.cpp), which is
+## the same meta `_severity_for_error_item` already trusts for severity — so a
+## tree holding rows with that meta IS the errors tree, in any editor language
+## and any dock layout.
+##
+## There can also be more than one ScriptEditorDebugger: Godot makes one per
+## debug session tab, so the first one found may be a stale tab while the
+## errors are in another.
 func _get_debugger_error_tree() -> Tree:
-	if is_instance_valid(_debugger_error_tree):
+	# Re-validate rather than trust the cache: a cached tree can be freed with
+	# its tab, and one cached while empty may not be the errors tree at all.
+	if is_instance_valid(_debugger_error_tree) and _tree_error_rows(_debugger_error_tree) > 0:
 		return _debugger_error_tree
 	if not _editor_plugin:
 		return null
 	var base := _editor_plugin.get_editor_interface().get_base_control()
-	var debugger := _find_node_by_class(base, "ScriptEditorDebugger")
-	if not debugger:
+
+	var debuggers: Array[Node] = []
+	_collect_by_class(base, "ScriptEditorDebugger", debuggers)
+	var candidates: Array[Tree] = []
+	for debugger in debuggers:
+		_collect_trees(debugger, candidates)
+
+	var best: Tree = null
+	var best_rows := 0
+	for tree: Tree in candidates:
+		var rows := _tree_error_rows(tree)
+		if rows > best_rows:
+			best = tree
+			best_rows = rows
+
+	_error_tree_diag = {
+		&"debugger_nodes": debuggers.size(),
+		&"trees_examined": candidates.size(),
+		&"rows_in_chosen_tree": best_rows,
+		&"matched_by": "error/warning row meta" if best != null else "nothing matched",
+	}
+
+	# No tree has error rows: either nothing has errored yet, or the panel was
+	# cleared. Both mean "no errors", and answering that is correct — guessing a
+	# tree is what produced the wrong answer before.
+	if best == null:
+		_debugger_error_tree = null
 		return null
-	var tree := _find_error_tree(debugger)
-	if tree:
-		_debugger_error_tree = tree
+
+	_debugger_error_tree = best
 	return _debugger_error_tree
 
-func _find_error_tree(node: Node) -> Tree:
-	var candidates: Array[Tree] = []
-	_collect_trees(node, candidates)
-	for tree: Tree in candidates:
-		var p := tree.get_parent()
-		while p and p != node:
-			if "Error" in p.name or "error" in p.name:
-				return tree
-			p = p.get_parent()
-	if not candidates.is_empty():
-		return candidates[0]
-	return null
+## Number of top-level rows Godot built as an error/warning entry. Zero for any
+## other Tree in the debugger, which is what makes this a reliable identifier.
+func _tree_error_rows(tree: Tree) -> int:
+	var root := tree.get_root()
+	if root == null:
+		return 0
+	var n := 0
+	var item := root.get_first_child()
+	while item:
+		if item.has_meta(&"_is_error") or item.has_meta(&"_is_warning"):
+			n += 1
+		item = item.get_next()
+	return n
+
+func _collect_by_class(node: Node, cls_name: String, out: Array[Node]) -> void:
+	if node.get_class() == cls_name:
+		out.append(node)
+	for child: Node in node.get_children():
+		_collect_by_class(child, cls_name, out)
 
 func _collect_trees(node: Node, out: Array[Tree]) -> void:
 	if node is Tree:
@@ -1207,6 +1325,15 @@ func _yield_ms(ms: int) -> void:
 		OS.delay_msec(ms)
 
 
+## Marker consumed once by MCPRuntime._ready() in the spawned game process. Has
+## to be a file rather than an argument to play_custom_scene()/play_main_scene()
+## (neither takes one) — writing it just before Play launches the process and
+## reading it in the first autoload's _ready() is what makes debug_collisions
+## land before the scene exists, which is the one point SceneTree.debug_
+## collisions_hint is documented to reliably apply from (see notes/BACKLOG.md
+## §5.4 — flipping it mid-session is not reliable).
+const _DEBUG_COLLISIONS_MARKER := "res://addons/godot_mcp/cache/.debug_collisions"
+
 func run_scene(args: Dictionary) -> Dictionary:
 	if not _editor_plugin:
 		return {&"ok": false, &"error": "Editor plugin not available"}
@@ -1214,19 +1341,41 @@ func run_scene(args: Dictionary) -> Dictionary:
 	var scene: String = str(args.get(&"scene", ""))
 	var block_until_started: bool = bool(args.get(&"block_until_started", true))
 	var wait_for_runtime: bool = bool(args.get(&"wait_for_runtime", false))
-	# Default of 20s gives slower machines (cold-cache import, autoload heavy
-	# games) enough headroom for the editor to reach the playing state and
-	# for MCPRuntime to connect. Measured empirically: MCPRuntime connects
-	# anywhere from ~11s to ~20s after run_scene is called (engine boot +
-	# autoload init + WS handshake — timing varies with system load), so a
-	# 10s default was cutting it too close and made wait_for_runtime report
-	# false even though the runtime went on to connect moments later. If it
-	# still reports false, poll get_runtime_status shortly after — the
-	# connection is very likely just about to land, not actually broken.
+	var debug_collisions: bool = bool(args.get(&"debug_collisions", false))
+	# Detached: run the game as its own process instead of through the editor's
+	# Play. The editor's Play always attaches the remote debugger, and a
+	# debugger-attached process HALTS on any GDScript runtime error — including
+	# one inside a game_eval snippet — which reads to the bridge as a dead
+	# connection and costs a stop/run cycle per typo (notes/BACKLOG.md 5.2).
+	# Measured detached: the same bad snippet answers in 107ms and the next call
+	# still works.
+	var attach_debugger: bool = bool(args.get(&"attach_debugger", true))
+	if debug_collisions:
+		DirAccess.make_dir_recursive_absolute(_DEBUG_COLLISIONS_MARKER.get_base_dir())
+		var f := FileAccess.open(_DEBUG_COLLISIONS_MARKER, FileAccess.WRITE)
+		if f:
+			f.store_string("1")
+	elif FileAccess.file_exists(_DEBUG_COLLISIONS_MARKER):
+		DirAccess.remove_absolute(_DEBUG_COLLISIONS_MARKER)
+	# A cap, not an expected wait. The "~11-20s" this comment used to quote was
+	# measured while a bug made every call run its full timeout; re-measured
+	# 2026-09-03 on the same machine and project, MCPRuntime connects in
+	# **1.6-1.7s**, attached or detached, across repeated runs. The default
+	# stays at 20s because it costs nothing when the connection is fast and
+	# still covers a cold-cache import on a big project — but an agent should
+	# expect ~2s, not a stall. If wait_for_runtime does report false, poll
+	# get_runtime_status shortly after: the connection is very likely about to
+	# land rather than broken.
 	var startup_timeout_ms: int = int(args.get(&"startup_timeout_ms", 20000))
 
+	_recover_detached_pid()
 	if ei.is_playing_scene():
 		return {&"ok": false, &"error": "A scene is already running. Call stop_scene first."}
+	if _detached_pid != -1 and _process_alive(_detached_pid):
+		return {&"ok": false, &"error": "A detached game (pid %d) is already running. Call stop_scene first." % _detached_pid}
+
+	if not attach_debugger:
+		return await _run_scene_detached(scene, wait_for_runtime, startup_timeout_ms, debug_collisions)
 
 	# Determine which scene file will run, so we can compute /root/<RootName>
 	# for the agent's downstream query_runtime_node calls.
@@ -1314,6 +1463,22 @@ func _peek_scene_root_name(scene_path: String) -> String:
 	return str(st.get_node_name(0))
 
 func stop_scene(_args: Dictionary) -> Dictionary:
+	# The detached case comes FIRST, before the editor-plugin guard: ending a
+	# process we started ourselves needs no editor, and requiring one made a
+	# detached game unstoppable in exactly the situations where it is most
+	# likely to be left running.
+	#
+	# A detached game is not "playing" as far as the editor is concerned, so it
+	# has to be ended by pid or it outlives the session in the background.
+	_recover_detached_pid()
+	if _detached_pid != -1:
+		var pid := _detached_pid
+		_forget_detached_pid()
+		if _process_alive(pid):
+			_kill_pid(pid)
+			return {&"ok": true, &"detached": true, &"pid": pid, &"message": "Detached game (pid %d) stopped." % pid}
+		return {&"ok": true, &"detached": true, &"pid": pid, &"message": "Detached game (pid %d) had already exited." % pid}
+
 	if not _editor_plugin:
 		return {&"ok": false, &"error": "Editor plugin not available"}
 	var ei := _editor_plugin.get_editor_interface()
@@ -1321,6 +1486,67 @@ func stop_scene(_args: Dictionary) -> Dictionary:
 		return {&"ok": true, &"message": "No scene is currently running"}
 	ei.stop_playing_scene()
 	return {&"ok": true, &"message": "Scene stopped"}
+
+
+## Launch the game as a separate process, with no debugger attached.
+##
+## What this buys, and what it costs, both measured rather than assumed:
+##   + a runtime error inside game_eval comes back as a result instead of
+##     halting the process and timing the call out (5.2)
+##   + the editor is not driving the game, so its UI stays out of the way
+##   - no editor debugger: the debug_* tools have nothing to attach to, and the
+##     Debugger > Errors panel stays empty, so get_errors loses its runtime
+##     source. get_runtime_log and get_console_log still work.
+##   - is_playing() reports false: the editor genuinely is not playing anything.
+func _run_scene_detached(scene: String, wait_for_runtime: bool, startup_timeout_ms: int, debug_collisions: bool) -> Dictionary:
+	var target := scene
+	if target.is_empty() or target == "current":
+		var ei := _editor_plugin.get_editor_interface()
+		if target == "current":
+			var edited := ei.get_edited_scene_root()
+			target = edited.scene_file_path if edited else ""
+		if target.is_empty():
+			target = str(ProjectSettings.get_setting("application/run/main_scene", ""))
+	if target.is_empty():
+		return {&"ok": false, &"error": "No scene to run: pass 'scene', open one, or set a main scene."}
+
+	if debug_collisions:
+		DirAccess.make_dir_recursive_absolute(_DEBUG_COLLISIONS_MARKER.get_base_dir())
+		var f := FileAccess.open(_DEBUG_COLLISIONS_MARKER, FileAccess.WRITE)
+		if f:
+			f.store_string("1")
+
+	var exe := OS.get_executable_path()
+	var project_dir := ProjectSettings.globalize_path("res://")
+	var pid := OS.create_process(exe, ["--path", project_dir, target])
+	if pid <= 0:
+		return {&"ok": false, &"error": "Could not start a detached Godot process (create_process returned %d)." % pid}
+
+	_remember_detached_pid(pid)
+	_last_run_scene_target = target
+	_last_run_scene_started_at_ms = Time.get_ticks_msec()
+
+	var runtime_connected := _runtime_is_connected()
+	var waited_ms := 0
+	if wait_for_runtime and not runtime_connected:
+		var t0 := Time.get_ticks_msec()
+		while not runtime_connected and (Time.get_ticks_msec() - t0) < startup_timeout_ms:
+			await _yield_ms(100)
+			runtime_connected = _runtime_is_connected()
+		waited_ms = Time.get_ticks_msec() - t0
+
+	var root_node_name: String = _peek_scene_root_name(target)
+	return {
+		&"ok": true,
+		&"detached": true,
+		&"pid": pid,
+		&"started": true,
+		&"scene_path": target,
+		&"runtime_connected": runtime_connected,
+		&"wait_for_runtime_ms": waited_ms,
+		&"runtime_root": "/root/%s" % root_node_name if not root_node_name.is_empty() else "",
+		&"message": "Started detached (pid %d), no debugger attached. game_eval survives a runtime error here; in exchange the debug_* tools and the Debugger > Errors source of get_errors are unavailable, and is_playing() reports false. stop_scene ends it." % pid,
+	}
 
 ## Backward-compatible thin wrapper around get_runtime_status. Keep using this
 ## if you only need the boolean. For richer info (uptime, runtime helper status,
@@ -1333,19 +1559,78 @@ func is_playing(_args: Dictionary) -> Dictionary:
 	var scene_path := ei.get_playing_scene() if playing else ""
 	return {&"ok": true, &"playing": playing, &"scene": scene_path}
 
+## Is this pid still alive, including one this process did not spawn?
+##
+## OS.is_process_running only knows the handles create_process opened in THIS
+## process, so a game adopted from a previous editor session always reads as
+## dead — which is precisely the case the pid file exists to cover. Fall back to
+## asking the OS directly.
+func _process_alive(pid: int) -> bool:
+	if pid <= 0:
+		return false
+	if OS.is_process_running(pid):
+		return true
+	var out: Array = []
+	if OS.get_name() == "Windows":
+		OS.execute("tasklist", ["/FI", "PID eq %d" % pid, "/NH", "/FO", "CSV"], out, true)
+		return out.size() > 0 and ("\"%d\"" % pid) in str(out[0])
+	return OS.execute("kill", ["-0", str(pid)], out, true) == 0
+
+## Kill by pid, including one this process did not spawn (see _process_alive).
+func _kill_pid(pid: int) -> void:
+	if OS.kill(pid) == OK:
+		return
+	var out: Array = []
+	if OS.get_name() == "Windows":
+		OS.execute("taskkill", ["/PID", str(pid), "/F"], out, true)
+	else:
+		OS.execute("kill", ["-9", str(pid)], out, true)
+
+func _remember_detached_pid(pid: int) -> void:
+	_detached_pid = pid
+	var f := FileAccess.open(_DETACHED_PID_FILE, FileAccess.WRITE)
+	if f:
+		f.store_string(str(pid))
+		f.close()
+
+func _forget_detached_pid() -> void:
+	_detached_pid = -1
+	if FileAccess.file_exists(_DETACHED_PID_FILE):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(_DETACHED_PID_FILE))
+
+## Adopt a detached game left running by a previous editor session.
+func _recover_detached_pid() -> void:
+	if _detached_pid != -1 or not FileAccess.file_exists(_DETACHED_PID_FILE):
+		return
+	var f := FileAccess.open(_DETACHED_PID_FILE, FileAccess.READ)
+	if not f:
+		return
+	var pid := int(f.get_as_text().strip_edges())
+	f.close()
+	if _process_alive(pid):
+		_detached_pid = pid
+	else:
+		_forget_detached_pid()
+
 ## Combined editor-side and runtime-side status snapshot.
 func get_runtime_status(_args: Dictionary) -> Dictionary:
 	if not _editor_plugin:
 		return {&"ok": false, &"error": "Editor plugin not available"}
 	var ei := _editor_plugin.get_editor_interface()
 	var playing := ei.is_playing_scene()
+	# A detached game is not "playing" as far as the editor is concerned, but it
+	# is running and the helper is talking to us — reporting uptime 0 for it made
+	# the field useless exactly where it is most wanted.
+	_recover_detached_pid()
+	var detached_running := _detached_pid != -1 and _process_alive(_detached_pid)
 	var uptime_ms := 0
-	if playing and _last_run_scene_started_at_ms > 0:
+	if (playing or detached_running) and _last_run_scene_started_at_ms > 0:
 		uptime_ms = Time.get_ticks_msec() - _last_run_scene_started_at_ms
 
 	return {
 		&"ok": true,
 		&"playing": playing,
+		&"detached_pid": _detached_pid if detached_running else null,
 		&"playing_scene": ei.get_playing_scene() if playing else "",
 		&"last_launched": _last_run_scene_target,
 		&"uptime_ms": uptime_ms,
@@ -1511,12 +1796,26 @@ func render_scene_preview(args: Dictionary) -> Dictionary:
 	viewport.add_child(camera)
 	camera.make_current()
 
-	# Two frames: one to build the render target, one to draw into it.
+	# Set before the scene ever draws a frame in this tree — the exact point
+	# SceneTree.debug_collisions_hint is documented to reliably apply from (see
+	# notes/BACKLOG.md §5.4). Reliable here in a way it is not for a live
+	# run_scene: this instance was only just added to the tree, so there is no
+	# "already drawn" frame to have missed. Restored after, since `host`'s tree
+	# is long-lived (the editor's own, most of the time) and this must not leave
+	# collision outlines on for anything else sharing it.
+	var show_collision: bool = bool(args.get(&"show_collision", false))
 	var tree := host.get_tree()
+	var prev_debug_collisions := tree.debug_collisions_hint
+	if show_collision:
+		tree.debug_collisions_hint = true
+
+	# Two frames: one to build the render target, one to draw into it.
 	await tree.process_frame
 	await tree.process_frame
 
 	var image := viewport.get_texture().get_image()
+	if show_collision:
+		tree.debug_collisions_hint = prev_debug_collisions
 	host.remove_child(viewport)
 	viewport.queue_free()
 
@@ -1877,18 +2176,20 @@ func create_resource(args: Dictionary) -> Dictionary:
 		return {&"ok": false, &"error": "Missing 'resource_type'"}
 	if not ClassDB.class_exists(resource_type):
 		return {&"ok": false, &"error": "Unknown resource type: " + resource_type}
+	if not ClassDB.is_parent_class(resource_type, "Resource"):
+		return {&"ok": false, &"error": "Not a Resource type: " + resource_type}
+	if ClassDB.is_parent_class(resource_type, "PackedScene"):
+		return {&"ok": false, &"error": "create_resource cannot create PackedScene assets; use create_scene"}
+	if not ClassDB.can_instantiate(resource_type):
+		return {&"ok": false, &"error": "Cannot instantiate: " + resource_type}
+	if FileAccess.file_exists(resource_path):
+		return {&"ok": false, &"error": "Refusing to overwrite an existing asset: " + resource_path}
 
 	var instance = ClassDB.instantiate(resource_type)
 	if not instance:
 		return {&"ok": false, &"error": "Cannot instantiate: " + resource_type}
-	if not (instance is Resource):
-		if instance is Node:
-			instance.free()
-		elif instance is RefCounted:
-			pass
-		else:
-			instance.free()
-		return {&"ok": false, &"error": "'%s' is not a Resource (it's a %s)" % [resource_type, instance.get_class()]}
+	if not ResourceSaver.get_recognized_extensions(instance).has(resource_path.get_extension().to_lower()):
+		return {&"ok": false, &"error": "Unsupported file extension for %s: %s" % [resource_type, resource_path]}
 
 	var save_result := ResourceSaver.save(instance, resource_path)
 	if save_result != OK:
@@ -1978,7 +2279,13 @@ func export_project(args: Dictionary) -> Dictionary:
 			return {&"ok": false, &"error": "Preset index %d not found" % preset_index}
 		preset_name = str(cfg.get_value(section, "name", ""))
 	if preset_name.is_empty():
-		return {&"ok": false, &"error": "Could not resolve a preset name"}
+		# Say what there IS. "Could not resolve a preset name" leaves the caller
+		# guessing at strings when the answer is a list the file already holds.
+		var known: Array = []
+		for sect in cfg.get_sections():
+			if sect.begins_with("preset.") and not sect.ends_with(".options"):
+				known.append(str(cfg.get_value(sect, "name", sect)))
+		return {&"ok": false, &"error": "Could not resolve a preset name. Presets in export_presets.cfg: %s" % (", ".join(known) if not known.is_empty() else "(none)")}
 
 	# Flush unsaved editor state so the clone reflects the current project.
 	if _editor_plugin:
@@ -2041,7 +2348,7 @@ func _run_export_thread(job_id: String, temp_dir: String, preset_name: String, a
 		job["status"] = "done" if (exit_code == 0 and written) else "failed"
 		job["exit_code"] = exit_code
 		job["artifact_written"] = written
-		job["log"] = _tail_text(log_text, 4000)
+		job["log"] = _tail_text(_condense_export_log(log_text), 4000)
 		_export_jobs[job_id] = job
 	_export_mutex.unlock()
 
@@ -2159,11 +2466,38 @@ func _rm_dir_recursive(path: String) -> void:
 ## thread finishes and the Node bridge logs the parse failure and drops the
 ## message, so the request just sits until its own client-side timeout fires.
 func _sanitize_log_text(s: String) -> String:
+	# Drop the WHOLE colour sequence, escape byte and all. Removing only the
+	# control character left the rest behind as literal text, so a log line came
+	# back reading "[90m[1msavepack[22m | ..." — noise no terminal will ever
+	# render, permanently baked into the payload and paid for in context.
+	var ansi := RegEx.new()
+	ansi.compile("\\x1b\\[[0-9;]*[A-Za-z]|\\[[0-9;]+m")
+	var stripped := ansi.sub(s, "", true)
 	var out := ""
-	for i in range(s.length()):
-		var c: int = s.unicode_at(i)
+	for i in range(stripped.length()):
+		var c: int = stripped.unicode_at(i)
 		if c == 9 or c == 10 or (c >= 32 and c != 127):
-			out += s[i]
+			out += stripped[i]
+	return out
+
+## The export log minus its per-file progress, which is most of it and says
+## nothing: a successful export spent 40 of its 45 lines naming each packed
+## file. Anything that looks like a problem is kept whatever it says.
+func _condense_export_log(s: String) -> String:
+	var kept: PackedStringArray = []
+	var dropped := 0
+	for line in s.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
+		var text := String(line)
+		var lower := text.to_lower()
+		var noisy := "savepack" in lower or "storing file" in lower or "almacenando archivo" in lower
+		var interesting := "error" in lower or "warning" in lower or "fail" in lower
+		if noisy and not interesting:
+			dropped += 1
+			continue
+		kept.append(text)
+	var out := "\n".join(kept)
+	if dropped > 0:
+		out += "\n(%d per-file progress line(s) omitted)" % dropped
 	return out
 
 func _tail_text(s: String, n: int) -> String:

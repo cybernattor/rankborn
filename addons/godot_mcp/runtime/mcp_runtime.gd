@@ -1,4 +1,5 @@
 extends Node
+const WireText = preload("res://addons/godot_mcp/utils/wire_text.gd")
 ## MCPRuntime — autoload that lives inside the user's running game and exposes
 ## a small set of "runtime" tools to the MCP server (take_screenshot,
 ## send_input, query_runtime_node, get_runtime_log, list_signal_connections).
@@ -42,6 +43,8 @@ const _AWAIT_CONDITION_MAX_MS := 60000
 
 var _step_jobs: Array = []
 var _condition_jobs: Array = []
+## Batches waiting out their settle_frames before answering.
+var _batch_jobs: Array = []
 
 # Activity the agent is told about as it happens, over the same push channel the
 # editor plugin uses. Scoped to what only the running game can see: the editor
@@ -64,8 +67,24 @@ func _ready() -> void:
 	_project_path = ProjectSettings.globalize_path("res://")
 	_started_at_msec = Time.get_ticks_msec()
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	_consume_debug_collisions_marker()
 	push_runtime_log("info", "MCPRuntime starting (project=%s)" % _project_path)
 	_attempt_connect()
+
+
+## Set by run_scene(debug_collisions=true) just before Play launches this
+## process, so this runs before any scene node exists — the one point
+## SceneTree.debug_collisions_hint is documented to reliably apply from.
+## Consumed once so it does not leak into a manual Play the developer runs by
+## hand later.
+const _DEBUG_COLLISIONS_MARKER := "res://addons/godot_mcp/cache/.debug_collisions"
+
+func _consume_debug_collisions_marker() -> void:
+	if not FileAccess.file_exists(_DEBUG_COLLISIONS_MARKER):
+		return
+	get_tree().debug_collisions_hint = true
+	DirAccess.remove_absolute(_DEBUG_COLLISIONS_MARKER)
+	push_runtime_log("info", "debug_collisions_hint enabled for this run (run_scene debug_collisions=true).")
 
 
 func _process(_delta: float) -> void:
@@ -115,6 +134,7 @@ func _process(_delta: float) -> void:
 func _physics_process(_delta: float) -> void:
 	_tick_step_jobs("physics")
 	_tick_condition_jobs()
+	_tick_batch_jobs()
 
 
 func _attempt_connect() -> void:
@@ -166,6 +186,12 @@ func _handle_message(json_string: String) -> void:
 			if tool_name == "await_condition":
 				_start_await_condition(rid, args)
 				return
+			# A batch asked to settle answers after those frames, so it takes the
+			# async path too. Without settle_frames it stays synchronous, which
+			# is the common case and the cheap one.
+			if tool_name == "batch_runtime" and int(args.get("settle_frames", 0)) > 0:
+				_start_batch_runtime(rid, args)
+				return
 			var result := _dispatch(tool_name, args)
 			var success: bool = bool(result.get("ok", false))
 			result.erase("ok")
@@ -173,7 +199,12 @@ func _handle_message(json_string: String) -> void:
 				"type": "tool_result",
 				"id": rid,
 				"success": success,
-				"result": result if success else null,
+				# The payload goes back on FAILURE too, which the editor side has
+				# always done and this side never did: everything a failed tool
+				# says beyond its error string — which operation of a batch broke,
+				# what it found instead, what was clamped — was being dropped, and
+				# the caller got a bare "Tool execution failed".
+				"result": result,
 				"error": str(result.get("error", "")) if not success else "",
 			})
 		_:
@@ -204,8 +235,121 @@ func _parse_stringified_args(args: Dictionary) -> void:
 					args[key] = parsed
 
 
+## Tools that answer LATER, through the async job queues (rid + tick), rather
+## than returning a Dictionary here. A batch cannot carry them: one request id
+## cannot fan out into several deferred answers, and pretending otherwise would
+## return "ok" for work that had not happened — the failure this surface is
+## most careful about.
+const _ASYNC_RUNTIME_TOOLS := {
+	"step_frames": "it answers after N frames",
+	"await_condition": "it answers when the condition holds",
+	"await_signal_runtime": "it answers when the signal fires",
+	"monitor_properties": "it answers after sampling N frames — and it takes setup_code, which is the one-call version of trigger-then-watch",
+	"replay_input_sequence": "it answers after playing the sequence — which is itself the batched form of send_input",
+	"wait": "it answers after the wait",
+}
+
+
+## Run several runtime tools in ONE round trip.
+##
+## Driving a running game is inherently several calls — press, look, press,
+## look — and each one is a WebSocket round trip through the bridge while the
+## game keeps running underneath. The editor side has had batch_execute for
+## this; the runtime side, where the round trips actually hurt, had nothing.
+##
+## Synchronous tools only, by construction (see _ASYNC_RUNTIME_TOOLS). Runs in
+## order, stops at the first failure when stop_on_error, and reports each
+## result positionally so a caller can tell which step went wrong.
+func _batch_runtime(args: Dictionary) -> Dictionary:
+	var ops = args.get("operations", [])
+	if ops is String:
+		var parsed = JSON.parse_string(ops)
+		if parsed is Array:
+			ops = parsed
+	if not (ops is Array) or (ops as Array).is_empty():
+		return {"ok": false, "error": "Missing 'operations' (non-empty array of {tool, args})"}
+	if (ops as Array).size() > 50:
+		return {"ok": false, "error": "Too many operations (max 50 per runtime batch)"}
+
+	var stop_on_error := bool(args.get("stop_on_error", false))
+	var results: Array = []
+	var all_ok := true
+
+	for i in range((ops as Array).size()):
+		var op_v = (ops as Array)[i]
+		if not (op_v is Dictionary) or not (op_v as Dictionary).has("tool"):
+			results.append({"ok": false, "error": "Operation %d must be an object with a 'tool' field" % i})
+			all_ok = false
+			if stop_on_error:
+				break
+			continue
+
+		var op: Dictionary = op_v
+		var op_tool := str(op.get("tool", ""))
+		if _ASYNC_RUNTIME_TOOLS.has(op_tool):
+			results.append({"ok": false, "error": "'%s' cannot be batched: %s. Call it on its own." % [op_tool, _ASYNC_RUNTIME_TOOLS[op_tool]]})
+			all_ok = false
+			if stop_on_error:
+				break
+			continue
+		if op_tool == "batch_runtime":
+			results.append({"ok": false, "error": "batch_runtime cannot be nested"})
+			all_ok = false
+			if stop_on_error:
+				break
+			continue
+
+		var op_args: Dictionary = op.get("args", {}) if op.get("args", {}) is Dictionary else {}
+		_parse_stringified_args(op_args)
+		var res := _dispatch(op_tool, op_args)
+		results.append(res)
+		if not res.get("ok", false):
+			all_ok = false
+			if stop_on_error:
+				break
+
+	return {
+		"ok": all_ok,
+		"count": results.size(),
+		"requested": (ops as Array).size(),
+		"all_ok": all_ok,
+		"results": results,
+	}
+
+
+## A batch that has to let the game move before it answers.
+##
+## "Press, let some frames pass, look" is the shape driving a game actually
+## takes, and it was the one thing a batch could not express: `wait` and
+## `step_frames` answer later, so they cannot be operations inside one. This
+## runs the operations now, lets `settle_frames` physics frames pass, and then
+## answers — one round trip for the whole shape.
+func _start_batch_runtime(rid: String, args: Dictionary) -> void:
+	var frames := clampi(int(args.get("settle_frames", 0)), 1, _STEP_FRAMES_MAX)
+	var out := _batch_runtime(args)
+	var ok: bool = bool(out.get("ok", false))
+	out.erase("ok")
+	out["settled_frames"] = frames
+	_batch_jobs.append({"rid": rid, "remaining": frames, "payload": out, "ok": ok})
+
+
+func _tick_batch_jobs() -> void:
+	if _batch_jobs.is_empty():
+		return
+	var still_running: Array = []
+	for job in _batch_jobs:
+		job["remaining"] = int(job["remaining"]) - 1
+		if int(job["remaining"]) > 0:
+			still_running.append(job)
+			continue
+		_send_async_result(str(job["rid"]), bool(job["ok"]), job["payload"])
+	_batch_jobs = still_running
+
+
 func _dispatch(tool_name: String, args: Dictionary) -> Dictionary:
 	match tool_name:
+		"batch_runtime":
+			return _batch_runtime(args)
 		"take_screenshot":
 			return _take_screenshot(args)
 		"send_input":
@@ -378,7 +522,7 @@ func _start_await_condition(rid: String, args: Dictionary) -> void:
 
 	var timeout_ms := clampi(int(args.get("timeout_ms", 5000)), 1, _AWAIT_CONDITION_MAX_MS)
 	_condition_jobs.append({
-		"rid": rid, "expression": expr, "node": node,
+		"rid": rid, "expression": expr, "node": node, "source": code,
 		"deadline_ms": Time.get_ticks_msec() + timeout_ms,
 		"timeout_ms": timeout_ms,
 		"started_ms": Time.get_ticks_msec(),
@@ -399,10 +543,18 @@ func _tick_condition_jobs() -> void:
 			# A parse-clean expression can still fail at runtime (a null node, a
 			# method that does not exist). Report it once and stop, rather than
 			# re-failing every frame until the timeout.
-			_send_async_result(str(job["rid"]), false, {
+			# `return x` parses cleanly — Expression reads `return` as an unknown
+			# identifier and only fails here, looking it up on a null self. The
+			# engine's message for that says nothing about the real mistake, and
+			# it is the mistake callers make, since every other snippet argument
+			# here IS a function body.
+			var failure := {
 				"error": "The condition failed while evaluating: %s" % expr.get_error_text(),
 				"frames_waited": int(job["frames"]),
-			})
+			}
+			if str(job.get("source", "")).strip_edges().begins_with("return"):
+				failure["hint"] = "Drop the `return`: this argument is an expression, not a function body. Write `node.is_on_floor()`, not `return node.is_on_floor()`. `tree` and `node` are in scope."
+			_send_async_result(str(job["rid"]), false, failure)
 			continue
 		job["last"] = value
 		if _is_truthy(value):
@@ -768,13 +920,26 @@ func _send_input(args: Dictionary) -> Dictionary:
 	var event := _build_input_event(event_desc)
 	if event == null:
 		return {"ok": false, "error": "Could not construct InputEvent from: %s" % str(event_desc)}
-	Input.parse_input_event(event)
+	_dispatch_synthetic_input(event)
 	return {
 		"ok": true,
 		"dispatched": event.get_class(),
 		"event": event_desc,
 	}
 
+## Count of synthetic events dispatched but not yet seen back through _input()
+## below. Godot does not tag an InputEvent with where it came from, so this is
+## the only way to tell an expected synthetic event apart from real hardware
+## input landing at the same time.
+var _synthetic_pending := 0
+
+## The one place every synthetic InputEvent goes through — send_input,
+## replay_input_sequence, click_control_runtime all call this instead of
+## Input.parse_input_event() directly, so _input() below has one counter to
+## check rather than one per call site.
+func _dispatch_synthetic_input(event: InputEvent) -> void:
+	_synthetic_pending += 1
+	Input.parse_input_event(event)
 
 func _build_input_event(desc: Dictionary) -> InputEvent:
 	var t: String = str(desc.get("type", ""))
@@ -869,6 +1034,14 @@ func _to_vec2(v: Variant) -> Vector2:
 ## per _process frame for `frames` frames. Lets an agent verify motion/physics/
 ## interpolation (e.g. "did velocity ramp then settle?") without screenshots.
 ## Property paths support get_indexed() sub-paths, e.g. "position:x".
+##
+## `setup_code`, if given, is an optional game_eval-style snippet (same `tree`/
+## `node` scope) run once, synchronously, before the first sample — in the same
+## call that starts the sampling job. This closes the gap that made sub-second
+## events unobservable: without it, triggering an event needs its own game_eval
+## call, and by the time the following monitor_properties call lands the event
+## (a 0.74s jump arc, a 0.12s input buffer) is already over. With setup_code the
+## trigger and the first sample happen back to back, no round trip in between.
 func _start_monitor(rid: String, args: Dictionary) -> void:
 	var node_path: String = str(args.get("node_path", "")).strip_edges()
 	if node_path.is_empty():
@@ -889,7 +1062,22 @@ func _start_monitor(rid: String, args: Dictionary) -> void:
 	for p in props_raw:
 		props.append(str(p))
 
-	_monitor_jobs.append({
+	var setup_code := str(args.get("setup_code", "")).strip_edges()
+	var setup_result_serialized = null
+	var had_setup := false
+	if not setup_code.is_empty():
+		var compiled := _compile_eval(setup_code)
+		if not compiled.get("ok", false):
+			_send_async_result(rid, false, compiled)
+			return
+		# Same caveat as game_eval: a RUNTIME error in setup_code cannot be caught
+		# from GDScript here either (see 5.2 in notes/BACKLOG.md) — this only
+		# removes the round-trip gap, it does not make the trigger snippet safe.
+		var result = compiled["instance"].call("_mcp_eval", get_tree(), node)
+		setup_result_serialized = _serialize(result)
+		had_setup = true
+
+	var job := {
 		"rid": rid,
 		"node": node,
 		"node_path": node_path,
@@ -897,7 +1085,10 @@ func _start_monitor(rid: String, args: Dictionary) -> void:
 		"frames_left": frames,
 		"total_frames": frames,
 		"samples": [],
-	})
+	}
+	if had_setup:
+		job["setup_result"] = setup_result_serialized
+	_monitor_jobs.append(job)
 
 func _tick_monitors() -> void:
 	if _monitor_jobs.is_empty():
@@ -924,7 +1115,7 @@ func _tick_monitors() -> void:
 		job["frames_left"] -= 1
 
 		if job["frames_left"] <= 0:
-			_send_async_result(str(job["rid"]), true, {
+			var out := {
 				"node_path": job["node_path"],
 				"frames": job["total_frames"],
 				"samples": job["samples"],
@@ -932,7 +1123,10 @@ func _tick_monitors() -> void:
 					job["props"].size(), "y" if job["props"].size() == 1 else "ies",
 					job["total_frames"], job["node_path"],
 				],
-			})
+			}
+			if job.has("setup_result"):
+				out["setup_result"] = job["setup_result"]
+			_send_async_result(str(job["rid"]), true, out)
 			_monitor_jobs.remove_at(i)
 		i -= 1
 
@@ -943,7 +1137,12 @@ func _send_async_result(rid: String, success: bool, payload: Dictionary) -> void
 		"type": "tool_result",
 		"id": rid,
 		"success": success,
-		"result": payload if success else null,
+		# On failure too — same reason as the synchronous path, and it matters
+		# more here: a failing async job carries the work it DID manage. When a
+		# monitored node is freed mid-sampling, monitor_properties reports the
+		# samples it collected up to that frame, and those were being dropped
+		# along with everything else that was not the error string.
+		"result": payload,
 		"error": str(payload.get("error", "")) if not success else "",
 	})
 
@@ -985,7 +1184,7 @@ func _tick_replays() -> void:
 		var f: int = job["frame"]
 		for e in job["events"]:
 			if int(e["frame"]) == f:
-				Input.parse_input_event(e["evt"])
+				_dispatch_synthetic_input(e["evt"])
 				job["pushed"] += 1
 		job["frame"] += 1
 		if job["frame"] > int(job["end_frame"]):
@@ -1005,9 +1204,21 @@ var _recorded: Array = []
 var _record_start_frame := 0
 var _record_mouse_motion := false
 
-## Fires for every input event; while recording, append it (relative to the record
-## start frame) in the same shape replay_input_sequence consumes.
+## Fires for every input event, real or synthetic — Godot does not tag origin,
+## so this one handler does both jobs that need to see every event: recording
+## (below, unchanged) and telling real input apart from `_dispatch_synthetic_
+## input`'s own dispatch (see notes/BACKLOG.md §5.6 — a real mouse click landed
+## as an attack, blocked jumping, and read as a tool bug for a long time before
+## the real cause was found). Every unexpected event is pushed through the same
+## unsolicited activity channel _tick_scene_awareness uses, not just logged for
+## a poll to maybe notice — the "louder warning" that entry asked for.
 func _input(event: InputEvent) -> void:
+	if _synthetic_pending > 0:
+		_synthetic_pending -= 1
+	else:
+		push_runtime_log("warn", "Real input reached the game during an automated run: %s. If the editor (or game) window has focus, real clicks/keys land on the game and can contaminate a test — see notes/BACKLOG.md §5.6." % event)
+		_push_activity("real_input_detected", {"event": str(event)})
+
 	if not _recording:
 		return
 	if event is InputEventMouseMotion and not _record_mouse_motion:
@@ -1481,14 +1692,14 @@ func _click_control_runtime(args: Dictionary) -> Dictionary:
 	down.pressed = true
 	down.position = center
 	down.global_position = center
-	Input.parse_input_event(down)
+	_dispatch_synthetic_input(down)
 
 	var up := InputEventMouseButton.new()
 	up.button_index = button_index
 	up.pressed = false
 	up.position = center
 	up.global_position = center
-	Input.parse_input_event(up)
+	_dispatch_synthetic_input(up)
 
 	return {"ok": true, "node_path": node_path, "clicked_at": {"x": center.x, "y": center.y},
 		"message": "Clicked '%s' at global (%.1f, %.1f)" % [node_path, center.x, center.y]}
@@ -1591,4 +1802,8 @@ func _ensure_cache_dir() -> void:
 
 func _send(msg: Dictionary) -> void:
 	if _socket.get_ready_state() == WebSocketPeer.STATE_OPEN:
-		_socket.send_text(JSON.stringify(msg))
+		# Same reason as the editor client: a raw control character anywhere in
+		# the payload makes the message unparseable at the far end, and the call
+		# hangs to its timeout with the answer already computed. game_eval and
+		# get_runtime_log both carry whatever the game printed.
+		_socket.send_text(JSON.stringify(WireText.clean_tree(msg)))

@@ -111,7 +111,7 @@ func set_particle_material(args: Dictionary) -> Dictionary:
 	# by an error returned further down. Parse/validate first, assign last.
 	var parsed_gravity = null
 	if gravity != null:
-		parsed_gravity = _parse_value(gravity)
+		parsed_gravity = _parse_typed_value(gravity, TYPE_VECTOR3) if gravity is Array else _parse_value(gravity)
 		if not (parsed_gravity is Vector3):
 			_discard_scene(root, is_live)
 			return {&"ok": false, &"error": "'gravity' must be a {x,y,z} Vector3"}
@@ -176,10 +176,10 @@ func set_particle_color_gradient(args: Dictionary) -> Dictionary:
 		if not stop is Dictionary or not stop.has(&"offset") or not stop.has(&"color"):
 			_discard_scene(root, is_live)
 			return {&"ok": false, &"error": "Each stop must be {offset: float, color: {r,g,b,a}}"}
-		var parsed_color = _parse_value(stop[&"color"])
+		var parsed_color = _parse_typed_value(stop[&"color"], TYPE_COLOR)
 		if not (parsed_color is Color):
 			_discard_scene(root, is_live)
-			return {&"ok": false, &"error": "Stop 'color' must be a Color, e.g. {\"r\":1,\"g\":1,\"b\":1,\"a\":1}"}
+			return {&"ok": false, &"error": "Stop 'color' must be a Color: \"#ff0000\" or {\"r\":1,\"g\":1,\"b\":1,\"a\":1}"}
 		offsets.append(float(stop[&"offset"]))
 		colors.append(parsed_color)
 	gradient.offsets = offsets

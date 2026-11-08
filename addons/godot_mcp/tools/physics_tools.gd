@@ -12,18 +12,14 @@ func add_raycast(args: Dictionary) -> Dictionary:
 	var scene_path: String = _ensure_res_path(str(args.get(&"scene_path", "")))
 	var parent_path: String = str(args.get(&"parent_path", "."))
 	var node_name: String = str(args.get(&"node_name", ""))
-	var dimension: String = str(args.get(&"dimension", "2D"))
+	var dimension: String = str(args.get(&"dimension", ""))
 	var target_position = args.get(&"target_position")
 	var enabled: bool = bool(args.get(&"enabled", true))
 
 	if scene_path.strip_edges() == "res://":
 		return {&"ok": false, &"error": "Missing 'scene_path'"}
-	if dimension not in ["2D", "3D"]:
+	if not dimension.is_empty() and dimension not in ["2D", "3D"]:
 		return {&"ok": false, &"error": "Invalid 'dimension': %s. Use '2D' or '3D'." % dimension}
-
-	var node_type: String = "RayCast2D" if dimension == "2D" else "RayCast3D"
-	if node_name.strip_edges().is_empty():
-		node_name = node_type
 
 	var result := _acquire_scene(scene_path)
 	if not result[2].is_empty():
@@ -37,6 +33,15 @@ func add_raycast(args: Dictionary) -> Dictionary:
 		_discard_scene(root, is_live)
 		return err
 
+	if dimension.is_empty():
+		dimension = _dimension_of(parent)
+		if dimension.is_empty():
+			dimension = "2D"
+
+	var node_type: String = "RayCast2D" if dimension == "2D" else "RayCast3D"
+	if node_name.strip_edges().is_empty():
+		node_name = node_type
+
 	var raycast: Node = ClassDB.instantiate(node_type)
 	if not raycast:
 		_discard_scene(root, is_live)
@@ -45,7 +50,11 @@ func add_raycast(args: Dictionary) -> Dictionary:
 	raycast.set(&"enabled", enabled)
 
 	if target_position != null:
-		var parsed = _parse_value(target_position)
+		# Typed, not bare: _parse_value leaves [0, 20] an Array, so the array form
+		# that set_node_properties and tilemap coords both accept was refused here.
+		var parsed = VariantCodec.parse_typed_value(
+			target_position, TYPE_VECTOR2 if dimension == "2D" else TYPE_VECTOR3
+		) if target_position is Array else _parse_value(target_position)
 		if dimension == "2D":
 			if not (parsed is Vector2):
 				raycast.free()
@@ -92,7 +101,7 @@ func setup_collision(args: Dictionary) -> Dictionary:
 	if scene_path.strip_edges() == "res://":
 		return {&"ok": false, &"error": "Missing 'scene_path'"}
 	if shape_type.strip_edges().is_empty():
-		return {&"ok": false, &"error": "Missing 'shape_type'. Use 'rectangle' or 'circle' for 2D nodes, 'box' or 'sphere' for 3D nodes."}
+		return {&"ok": false, &"error": "Missing 'shape_type'. Use 'rectangle', 'circle' or 'capsule' for 2D nodes, 'box', 'sphere' or 'capsule' for 3D nodes."}
 
 	var result := _acquire_scene(scene_path)
 	if not result[2].is_empty():
@@ -125,28 +134,42 @@ func setup_collision(args: Dictionary) -> Dictionary:
 		match shape_type:
 			"box":
 				var box := BoxShape3D.new()
-				box.size = _parse_value(size) if size != null else Vector3(1, 1, 1)
+				box.size = _parse_typed_value(size, TYPE_VECTOR3) if size is Array else (_parse_value(size) if size != null else Vector3(1, 1, 1))
 				shape3d = box
 			"sphere":
 				var sphere := SphereShape3D.new()
 				sphere.radius = float(size) if size != null else 0.5
 				shape3d = sphere
+			"capsule":
+				var capsule3d := CapsuleShape3D.new()
+				var capsule_size3d: Vector2 = VariantCodec.parse_typed_value(size, TYPE_VECTOR2) if size != null else Vector2(0.5, 2.0)
+				capsule3d.radius = capsule_size3d.x
+				capsule3d.height = capsule_size3d.y
+				shape3d = capsule3d
 			_:
 				_discard_scene(root, is_live)
-				return {&"ok": false, &"error": "Invalid 'shape_type' for a 3D node: %s. Use 'box' or 'sphere'." % shape_type}
+				return {&"ok": false, &"error": "Invalid 'shape_type' for a 3D node: %s. Use 'box', 'sphere' or 'capsule'." % shape_type}
 	else:
 		match shape_type:
 			"rectangle":
 				var rect := RectangleShape2D.new()
-				rect.size = _parse_value(size) if size != null else Vector2(32, 32)
+				rect.size = _parse_typed_value(size, TYPE_VECTOR2) if size is Array else (_parse_value(size) if size != null else Vector2(32, 32))
 				shape = rect
 			"circle":
 				var circle := CircleShape2D.new()
 				circle.radius = float(size) if size != null else 16.0
 				shape = circle
+			"capsule":
+				# The default body shape for a 2D platformer character, and the
+				# tool used to answer it with "use rectangle or circle".
+				var capsule := CapsuleShape2D.new()
+				var capsule_size: Vector2 = VariantCodec.parse_typed_value(size, TYPE_VECTOR2) if size != null else Vector2(16, 32)
+				capsule.radius = capsule_size.x
+				capsule.height = capsule_size.y
+				shape = capsule
 			_:
 				_discard_scene(root, is_live)
-				return {&"ok": false, &"error": "Invalid 'shape_type' for a 2D node: %s. Use 'rectangle' or 'circle'." % shape_type}
+				return {&"ok": false, &"error": "Invalid 'shape_type' for a 2D node: %s. Use 'rectangle', 'circle' or 'capsule'." % shape_type}
 
 	var collision_node_type: String = "CollisionShape3D" if is_3d else "CollisionShape2D"
 
@@ -183,7 +206,7 @@ func setup_collision(args: Dictionary) -> Dictionary:
 	# old centred behaviour.
 	var offset = args.get(&"offset")
 	if offset != null:
-		collision_node.set(&"position", _parse_value(offset))
+		collision_node.set(&"position", _parse_typed_value(offset, TYPE_VECTOR3 if is_3d else TYPE_VECTOR2) if offset is Array else _parse_value(offset))
 	elif not is_3d and target.is_class("CollisionObject2D"):
 		var half: float = 0.0
 		if shape is RectangleShape2D:

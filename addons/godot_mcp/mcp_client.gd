@@ -1,6 +1,7 @@
 @tool
 extends Node
 class_name MCPClient
+const WireText = preload("res://addons/godot_mcp/utils/wire_text.gd")
 ## WebSocket client for communication with the MCP server.
 ## Handles connection, reconnection, and message routing.
 
@@ -162,6 +163,12 @@ func _handle_connect() -> void:
 		&"type": &"godot_ready",
 		&"role": &"editor",
 		&"project_path": _project_path,
+		# The server compares this with its own version. A server newer than the
+		# addon advertises tools whose GDScript handler does not exist yet, and
+		# the failure surfaces as "Unknown tool" or a silently missing argument
+		# rather than as "you did not reinstall the addon" — which is exactly
+		# what the release notes have been asking users to remember to do.
+		&"addon_version": addon_version(),
 	}
 	# Only sent when configured on this side; a server with no secret set ignores
 	# it, so setting it here alone cannot lock the editor out.
@@ -272,10 +279,21 @@ func send_editor_activity(event: Dictionary) -> void:
 
 func _send_message(message: Dictionary) -> void:
 	if socket.get_ready_state() == WebSocketPeer.STATE_OPEN:
-		socket.send_text(JSON.stringify(message))
+		# Cleaned here rather than in each tool: JSON.stringify leaves C0 control
+		# characters raw, and one of them makes the whole message unparseable at
+		# the far end. The server drops it and the call hangs to its timeout with
+		# the answer already computed. See WireText.
+		socket.send_text(JSON.stringify(WireText.clean_tree(message)))
 
 func is_connected_to_server() -> bool:
 	return _is_connected
 
 func is_runtime_connected() -> bool:
 	return _runtime_connected
+
+## Version from plugin.cfg, so it cannot drift from what the editor loaded.
+static func addon_version() -> String:
+	var cfg := ConfigFile.new()
+	if cfg.load("res://addons/godot_mcp/plugin.cfg") != OK:
+		return ""
+	return str(cfg.get_value("plugin", "version", ""))

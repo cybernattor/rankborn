@@ -1,96 +1,12 @@
 @tool
-extends Node
+extends SceneToolBase
 class_name BatchTools
 ## Batch/refactor/analysis tools for MCP.
 ## Handles: find_nodes_by_type, batch_set_property, get_scene_dependencies,
 ##          rename_symbol_project_wide
 
-const VariantCodec = preload("res://addons/godot_mcp/utils/variant_codec.gd")
-const PathGuard = preload("res://addons/godot_mcp/utils/path_guard.gd")
-
 const _SKIP_EXTENSIONS := {".import": true, ".uid": true, ".translation": true}
 const MAX_TRAVERSAL_DEPTH := 24
-
-var _editor_plugin: EditorPlugin = null
-
-func set_editor_plugin(plugin: EditorPlugin) -> void:
-	_editor_plugin = plugin
-
-# =============================================================================
-# Shared helpers (mirrors scene_tools.gd)
-# =============================================================================
-func _refresh_and_reload(scene_path: String) -> void:
-	if _editor_plugin:
-		_editor_plugin.get_editor_interface().get_resource_filesystem().scan()
-		var ei = _editor_plugin.get_editor_interface()
-		var edited = ei.get_edited_scene_root()
-		if edited and edited.scene_file_path == scene_path:
-			ei.reload_scene_from_path(scene_path)
-
-## Sanitizes a res://-relative path and blocks traversal outside the project
-## (e.g. "../../../Windows/System32"). On rejection returns a path that can
-## never resolve to a real file, so every downstream FileAccess/load() call
-## fails closed with a clear "does not exist"/"invalid" error instead of
-## silently escaping the project sandbox. See MERGE_NOTES.md for why this
-## exists — a plain "res://" prefix check does NOT stop "../" traversal.
-func _ensure_res_path(path: String) -> String:
-	var guarded := PathGuard.sanitize(path)
-	if not guarded[&"ok"]:
-		push_warning("[MCP] Rejected path outside project sandbox: %s (%s)" % [path, guarded[&"error"]])
-		return "res://__mcp_rejected_path__"
-	return guarded[&"path"]
-
-func _load_scene(scene_path: String) -> Array:
-	"""Returns [scene_root, error_dict]. If error_dict is not empty, scene_root is null."""
-	if scene_path == "res://__mcp_rejected_path__":
-		return [null, {&"ok": false, &"error": "Path escapes the project sandbox (rejected)"}]
-	if not FileAccess.file_exists(scene_path):
-		return [null, {&"ok": false, &"error": "Scene does not exist: " + scene_path}]
-
-	var packed = load(scene_path) as PackedScene
-	if not packed:
-		return [null, {&"ok": false, &"error": "Failed to load scene: " + scene_path}]
-
-	var root = _instantiate_packed_scene_for_edit(packed)
-	if not root:
-		return [null, {&"ok": false, &"error": "Failed to instantiate scene"}]
-
-	return [root, {}]
-
-func _instantiate_packed_scene_for_edit(packed: PackedScene) -> Node:
-	if not packed:
-		return null
-	if not Engine.is_editor_hint():
-		return packed.instantiate()
-	var state = packed.get_state()
-	if state and state.get_base_scene_state() != null:
-		return packed.instantiate(PackedScene.GEN_EDIT_STATE_MAIN_INHERITED)
-	return packed.instantiate(PackedScene.GEN_EDIT_STATE_MAIN)
-
-func _save_scene(scene_root: Node, scene_path: String) -> Dictionary:
-	"""Pack and save a scene. Returns error dict or empty on success."""
-	if scene_path == "res://__mcp_rejected_path__":
-		scene_root.queue_free()
-		return {&"ok": false, &"error": "Path escapes the project sandbox (rejected)"}
-	var packed = PackedScene.new()
-	var pack_result = packed.pack(scene_root)
-	if pack_result != OK:
-		scene_root.queue_free()
-		return {&"ok": false, &"error": "Failed to pack scene: " + str(pack_result)}
-
-	var save_result = ResourceSaver.save(packed, scene_path)
-	scene_root.queue_free()
-
-	if save_result != OK:
-		return {&"ok": false, &"error": "Failed to save scene: " + str(save_result)}
-
-	_refresh_and_reload(scene_path)
-	return {}
-
-func _find_node(scene_root: Node, node_path: String) -> Node:
-	if node_path == "." or node_path.is_empty():
-		return scene_root
-	return scene_root.get_node_or_null(node_path)
 
 # =============================================================================
 # find_nodes_by_type
@@ -105,14 +21,16 @@ func find_nodes_by_type(args: Dictionary) -> Dictionary:
 	if node_type.strip_edges().is_empty():
 		return {&"ok": false, &"error": "Missing 'node_type'"}
 
-	var result := _load_scene(scene_path)
-	if not result[1].is_empty():
-		return result[1]
-	var root: Node = result[0]
+	# Read the open scene's live tree when there is one, so nodes the user added
+	# but has not saved yet are reported instead of silently missing.
+	var acquired := _acquire_scene(scene_path)
+	if not acquired[2].is_empty():
+		return acquired[2]
+	var root: Node = acquired[0]
 
 	var matches: Array = []
 	_find_nodes_by_type_recursive(root, root, node_type, exact_match, matches)
-	root.queue_free()
+	_discard_scene(root, acquired[1])
 
 	return {&"ok": true, &"scene_path": scene_path, &"node_type": node_type,
 		&"matches": matches, &"count": matches.size()}
@@ -143,31 +61,59 @@ func batch_set_property(args: Dictionary) -> Dictionary:
 	if not args.has(&"value"):
 		return {&"ok": false, &"error": "Missing 'value'"}
 
-	var result := _load_scene(scene_path)
-	if not result[1].is_empty():
-		return result[1]
-	var root: Node = result[0]
+	# Used to load from disk, save, and reload the open scene: every unsaved edit
+	# in that scene was lost, even with dry_run. The live tree keeps them, and the
+	# change lands as one undo entry.
+	var acquired := _acquire_scene(scene_path)
+	if not acquired[2].is_empty():
+		return acquired[2]
+	var root: Node = acquired[0]
+	var is_live: bool = acquired[1]
 
-	var parsed_value = VariantCodec.parse_value(value)
 	var applied: Array = []
 	var failed: Array = []
+	var ctx := _begin_edit(is_live, "MCP: batch set %s" % property_name, root)
 
 	for np in node_paths:
 		var node_path := str(np)
 		var target := _find_node(root, node_path)
 		if not target:
-			failed.append({&"node_path": node_path, &"error": "Node not found"})
+			# Named in the message too: a batch answer is read as a list of
+			# strings, and "Node not found" repeated four times says nothing
+			# about which four.
+			failed.append({&"node_path": node_path, &"error": "Node not found: " + node_path})
 			continue
 		if not (property_name in target):
 			failed.append({&"node_path": node_path, &"error": "No property '%s' on %s" % [property_name, target.get_class()]})
 			continue
+		if property_name in ["script", "owner", "scene_file_path"]:
+			failed.append({&"node_path": node_path, &"error": "Use the dedicated script/structural tool"})
+			continue
+		if property_name == "name":
+			var guard := _structural_edit_error(root, target)
+			if not guard.is_empty():
+				failed.append({&"node_path": node_path, &"error": guard[&"error"]})
+				continue
+		var parsed_value: Variant = _parse_typed_value(value, _property_type_map(target).get(property_name, -1))
 		var old_value = target.get(property_name)
 		target.set(property_name, parsed_value)
+		if not _values_match(target.get(property_name), parsed_value):
+			target.set(property_name, old_value)
+			failed.append({&"node_path": node_path, &"error": "Property rejected or clamped the requested value"})
+			continue
+		_edit_record(ctx, target, &"set", [StringName(property_name), target.get(property_name)],
+			&"set", [StringName(property_name), old_value])
 		applied.append({&"node_path": node_path, &"old": VariantCodec.serialize_value(old_value), &"new": VariantCodec.serialize_value(parsed_value)})
 
-	var err := _save_scene(root, scene_path)
-	if not err.is_empty():
-		return err
+	if applied.is_empty():
+		# Nothing changed: no undo entry, no dirty marker, no rewrite of the file.
+		_edit_abort(ctx)
+		_discard_scene(root, is_live)
+	else:
+		_edit_commit(ctx)
+		var err := _finish_scene_edit(root, scene_path, is_live)
+		if not err.is_empty():
+			return err
 
 	return {&"ok": true, &"scene_path": scene_path, &"property_name": property_name,
 		&"applied": applied, &"failed": failed,
@@ -214,8 +160,8 @@ func rename_symbol_project_wide(args: Dictionary) -> Dictionary:
 
 	if old_name.strip_edges().is_empty() or new_name.strip_edges().is_empty():
 		return {&"ok": false, &"error": "Missing 'old_name' or 'new_name'"}
-	if root_path == "res://__mcp_rejected_path__":
-		return {&"ok": false, &"error": "Path escapes the project sandbox (rejected)"}
+	if PathGuard.is_bad(root_path):
+		return PathGuard.error_for(root_path, "root")
 
 	var ident_check := RegEx.new()
 	ident_check.compile(_IDENTIFIER_RE)
@@ -234,13 +180,20 @@ func rename_symbol_project_wide(args: Dictionary) -> Dictionary:
 
 	var file_results: Array = []
 	var total_matches := 0
+	var changes: Dictionary = {}
+	var open_scenes: PackedStringArray = []
+	if not dry_run and _editor_plugin:
+		open_scenes = _editor_plugin.get_editor_interface().get_open_scenes()
 
 	for file_path: String in files:
 		var f := FileAccess.open(file_path, FileAccess.READ)
 		if not f:
-			continue
+			return {&"ok": false, &"error": "Cannot preflight file: " + file_path}
 		var content := f.get_as_text()
+		var read_error := f.get_error()
 		f.close()
+		if read_error != OK:
+			return {&"ok": false, &"error": "Failed to read file: " + file_path}
 
 		var matches := regex.search_all(content)
 		if matches.is_empty():
@@ -257,11 +210,24 @@ func rename_symbol_project_wide(args: Dictionary) -> Dictionary:
 
 		if not dry_run:
 			var new_content := regex.sub(content, new_name, true)
-			var wf := FileAccess.open(file_path, FileAccess.WRITE)
-			if not wf:
-				return {&"ok": false, &"error": "Failed to write file: " + file_path}
-			wf.store_string(new_content)
-			wf.close()
+			if new_content == content:
+				continue
+			if Array(open_scenes).any(func(open_path: String) -> bool: return _same_scene_path(open_path, file_path)):
+				return {&"ok": false, &"error": "Refusing to refactor an open scene: %s. Close its scene tab first; no files changed." % file_path}
+			changes[file_path] = new_content
+
+	# All candidates must pass preflight before the first disk write.
+	var written: Array = []
+	for file_path: String in changes:
+		var wf := FileAccess.open(file_path, FileAccess.WRITE)
+		if not wf:
+			return {&"ok": false, &"error": "Failed to write file: " + file_path, &"written_files": written}
+		wf.store_string(changes[file_path])
+		var write_error := wf.get_error()
+		wf.close()
+		if write_error != OK:
+			return {&"ok": false, &"error": "Failed to write file: " + file_path, &"written_files": written}
+		written.append(file_path)
 
 	if not dry_run and _editor_plugin:
 		_editor_plugin.get_editor_interface().get_resource_filesystem().scan()

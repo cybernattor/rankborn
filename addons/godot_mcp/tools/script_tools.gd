@@ -6,6 +6,13 @@ class_name ScriptTools
 ##          create_folder, delete_file, rename_file,
 ##          generate_property_forwarder
 
+## Set by the ToolExecutor for one call when the caller passed dry_run, and
+## read at every point below that would write. The scene tools inherit this
+## from SceneToolBase; these write FILES, which is the more irreversible half
+## of the surface and had no preview at all.
+var _dry_run := false
+var _dry_run_skipped_write := false
+
 const PathGuard = preload("res://addons/godot_mcp/utils/path_guard.gd")
 
 var _editor_plugin: EditorPlugin = null
@@ -60,6 +67,8 @@ func edit_script(args: Dictionary) -> Dictionary:
 	var _err0 := []
 	path = _guard_path(path, _err0)
 	if _err0: return _err0[0]
+	if path.get_extension().to_lower() != "gd":
+		return {&"ok": false, &"error": "edit_script only accepts .gd scripts; use scene tools for scenes: " + path}
 
 	if not FileAccess.file_exists(path):
 		return {&"ok": false, &"error": "File not found: " + path}
@@ -127,12 +136,18 @@ func edit_script(args: Dictionary) -> Dictionary:
 	var original_content := content
 	var new_content := content.substr(0, pos) + effective_new_snippet + content.substr(pos + matched_len)
 
-	# Write back
-	file = FileAccess.open(path, FileAccess.WRITE)
-	if not file:
-		return {&"ok": false, &"error": "Cannot write file: " + path}
-	file.store_string(new_content)
-	file.close()
+	# Write back — unless this is a preview, in which case everything above
+	# (finding the snippet, disambiguating it, building the new content) has
+	# already answered the question the caller actually has: would it match,
+	# and what would it produce.
+	if _dry_run:
+		_dry_run_skipped_write = true
+	else:
+		file = FileAccess.open(path, FileAccess.WRITE)
+		if not file:
+			return {&"ok": false, &"error": "Cannot write file: " + path}
+		file.store_string(new_content)
+		file.close()
 
 	# Count changes
 	var old_lines := old_snippet.split("\n")
@@ -140,15 +155,17 @@ func edit_script(args: Dictionary) -> Dictionary:
 	var added := maxi(0, new_lines.size() - old_lines.size())
 	var removed := maxi(0, old_lines.size() - new_lines.size())
 
-	_refresh_filesystem()
+	if not _dry_run:
+		_refresh_filesystem()
 
 	var result := {
 		&"ok": true,
 		&"path": path,
 		&"added": added,
 		&"removed": removed,
-		&"auto_applied": true,
-		&"message": "Applied edit to %s (+%d -%d lines)" % [path, added, removed]
+		&"auto_applied": not _dry_run,
+		&"message": ("Would apply edit to %s (+%d -%d lines); nothing written." if _dry_run
+			else "Applied edit to %s (+%d -%d lines)") % [path, added, removed]
 	}
 
 	# If the script is open in the editor, its unsaved buffer will overwrite this
@@ -368,6 +385,24 @@ func _discard_validation_artifact(res_path: String) -> void:
 		if FileAccess.file_exists(p):
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(p))
 
+## Remove any `__mcp_snippet_*.gd` left behind by an earlier validation.
+##
+## The discard above runs immediately after `reload()`, and a run_tests case
+## asserts nothing survives — yet one was found sitting in a real project's
+## addons folder, committed-adjacent and confusing. The engine can flush a
+## GDScript that carries a res:// resource_path back to disk later (a Save All
+## while it is still in the resource cache will do it), which is after the
+## discard has already run. Sweeping before each validation bounds the litter
+## to one file that only exists between two calls, rather than trusting a
+## single delete to be the last word.
+func _sweep_validation_artifacts() -> void:
+	var dir := DirAccess.open("res://addons/godot_mcp")
+	if dir == null:
+		return
+	for file in dir.get_files():
+		if file.begins_with("__mcp_snippet_") and (file.ends_with(".gd") or file.ends_with(".gd.uid")):
+			DirAccess.remove_absolute(ProjectSettings.globalize_path("res://addons/godot_mcp/" + file))
+
 ## Compile a game_eval snippet HERE, in the editor, before it is sent to the game.
 ##
 ## Not called by agents — the MCP server calls it on their behalf (see the
@@ -390,6 +425,8 @@ func validate_eval_snippet(args: Dictionary) -> Dictionary:
 	var src := "extends RefCounted\nfunc _mcp_eval(tree, node):\n"
 	for line in code.split("\n"):
 		src += "\t" + line + "\n"
+
+	_sweep_validation_artifacts()
 
 	var script := GDScript.new()
 	# Under res://addons/ on purpose: `exclude_addons` (on by default) mutes the
@@ -662,6 +699,11 @@ func delete_file(args: Dictionary) -> Dictionary:
 		if backup_err != OK:
 			return {&"ok": false, &"error": "Backup failed (%s); file NOT deleted: %s" % [str(backup_err), path]}
 
+	if _dry_run:
+		_dry_run_skipped_write = true
+		return {&"ok": true, &"path": path, &"existed": true,
+			&"message": "Would delete %s." % path}
+
 	var err := DirAccess.remove_absolute(path)
 	if err != OK:
 		return {&"ok": false, &"error": "Failed to delete file: " + str(err)}
@@ -685,11 +727,16 @@ func _file_is_open_in_editor(path: String) -> Dictionary:
 	# Scene tabs
 	if ei.has_method("get_open_scenes"):
 		var open_scenes: PackedStringArray = ei.get_open_scenes()
-		if open_scenes.has(path):
+		var absolute_path := ProjectSettings.globalize_path(path).simplify_path()
+		for scene_path: String in open_scenes:
+			var absolute_scene := ProjectSettings.globalize_path(scene_path).simplify_path()
+			var same_path := absolute_scene.nocasecmp_to(absolute_path) == 0 if OS.has_feature("windows") else absolute_scene == absolute_path
+			if not same_path:
+				continue
 			out[&"open"] = true
 			out[&"where"] = "scene tab"
 			var edited = ei.get_edited_scene_root()
-			if edited and edited.scene_file_path == path:
+			if edited and edited.scene_file_path == scene_path:
 				out[&"is_active"] = true
 				out[&"where"] = "active scene tab"
 			return out
@@ -733,18 +780,53 @@ func rename_file(args: Dictionary) -> Dictionary:
 	if FileAccess.file_exists(new_path):
 		return {&"ok": false, &"error": "Target already exists: " + new_path}
 
-	# Ensure target directory exists
+	# Plan every reference rewrite before moving anything: a later open scene
+	# must reject the whole rename, not leave earlier files partially updated.
+	var plan := {&"ok": true, &"changes": {}}
+	if update_references:
+		plan = _plan_path_references(old_path, new_path)
+		if not plan[&"ok"]:
+			return plan
+	var changes: Dictionary = plan[&"changes"]
+	if not _dry_run:
+		var affected: Array = [old_path, new_path]
+		affected.append_array(changes.keys())
+		for path: String in affected:
+			var open_info := _file_is_open_in_editor(path)
+			if open_info[&"open"] and "scene tab" in open_info[&"where"]:
+				return {&"ok": false, &"error": "Refusing to rename or rewrite an open scene: %s. Close its scene tab first; no files changed." % path}
+
+	if _dry_run:
+		# Checked above that the source exists and the target does not, which is
+		# what a preview of a rename is for.
+		_dry_run_skipped_write = true
+		return {&"ok": true, &"old_path": old_path, &"new_path": new_path,
+			&"message": "Would rename %s to %s." % [old_path, new_path]}
+
 	var dir_path := new_path.get_base_dir()
 	if not DirAccess.dir_exists_absolute(dir_path):
-		DirAccess.make_dir_recursive_absolute(dir_path)
+		var mkdir_err := DirAccess.make_dir_recursive_absolute(dir_path)
+		if mkdir_err != OK:
+			return {&"ok": false, &"error": "Failed to create directory: " + dir_path}
 
 	var err := DirAccess.rename_absolute(old_path, new_path)
 	if err != OK:
 		return {&"ok": false, &"error": "Failed to rename: " + str(err)}
 
 	var updated_files: Array = []
-	if update_references:
-		updated_files = _update_path_references(old_path, new_path)
+	for path: String in changes:
+		var write_path := new_path if path == old_path else path
+		var wf := FileAccess.open(write_path, FileAccess.WRITE)
+		if not wf:
+			return {&"ok": false, &"error": "Renamed file but failed to update reference: " + write_path,
+				&"updated_references": updated_files}
+		wf.store_string(changes[path])
+		var write_error := wf.get_error()
+		wf.close()
+		if write_error != OK:
+			return {&"ok": false, &"error": "Renamed file but failed to write reference: " + write_path,
+				&"updated_references": updated_files}
+		updated_files.append(write_path)
 
 	_refresh_filesystem()
 
@@ -774,17 +856,20 @@ func rename_file(args: Dictionary) -> Dictionary:
 ## substring: a plain replace would corrupt paths where old_path is a prefix
 ## of another (renaming res://player.gd must not touch res://player.gd.uid or
 ## res://player_data.gd).
-func _update_path_references(old_path: String, new_path: String) -> Array:
-	var updated: Array = []
+func _plan_path_references(old_path: String, new_path: String) -> Dictionary:
+	var changes: Dictionary = {}
 	var files: PackedStringArray = []
 	_collect_gd_tscn_tres_files("res://", files)
 
 	for file_path: String in files:
 		var f := FileAccess.open(file_path, FileAccess.READ)
 		if not f:
-			continue
+			return {&"ok": false, &"error": "Cannot preflight references in: " + file_path}
 		var content := f.get_as_text()
+		var read_error := f.get_error()
 		f.close()
+		if read_error != OK:
+			return {&"ok": false, &"error": "Failed to read references in: " + file_path}
 
 		if content.find(old_path) == -1:
 			continue
@@ -796,14 +881,9 @@ func _update_path_references(old_path: String, new_path: String) -> Array:
 		if new_content == content:
 			continue
 
-		var wf := FileAccess.open(file_path, FileAccess.WRITE)
-		if not wf:
-			continue
-		wf.store_string(new_content)
-		wf.close()
-		updated.append(file_path)
+		changes[file_path] = new_content
 
-	return updated
+	return {&"ok": true, &"changes": changes}
 
 func _collect_gd_tscn_tres_files(path: String, out: PackedStringArray, depth: int = 0) -> void:
 	if depth >= 24:
@@ -844,6 +924,8 @@ func generate_property_forwarder(args: Dictionary) -> Dictionary:
 	var _err5 := []
 	var script_path: String = _guard_path(script_path_raw, _err5)
 	if _err5: return _err5[0]
+	if script_path.get_extension().to_lower() != "gd":
+		return {&"ok": false, &"error": "generate_property_forwarder only accepts .gd scripts: " + script_path}
 	if property_name.is_empty():
 		return {&"ok": false, &"error": "Missing 'property_name'"}
 	if target_expression.is_empty():

@@ -27,17 +27,13 @@ func _mask_to_layers(mask: int) -> Array:
 func setup_navigation_region(args: Dictionary) -> Dictionary:
 	var scene_path: String = _ensure_res_path(str(args.get(&"scene_path", "")))
 	var parent_path: String = str(args.get(&"parent_path", "."))
-	var dimension: String = str(args.get(&"dimension", "2D"))
+	var dimension: String = str(args.get(&"dimension", ""))
 	var node_name: String = str(args.get(&"node_name", ""))
 
 	if scene_path.strip_edges() == "res://":
 		return {&"ok": false, &"error": "Missing 'scene_path'"}
-	if dimension not in ["2D", "3D"]:
+	if not dimension.is_empty() and dimension not in ["2D", "3D"]:
 		return {&"ok": false, &"error": "Invalid 'dimension': %s. Use '2D' or '3D'." % dimension}
-
-	var node_type: String = "NavigationRegion2D" if dimension == "2D" else "NavigationRegion3D"
-	if node_name.strip_edges().is_empty():
-		node_name = node_type
 
 	var result := _acquire_scene(scene_path)
 	if not result[2].is_empty():
@@ -50,6 +46,15 @@ func setup_navigation_region(args: Dictionary) -> Dictionary:
 		var err := _node_not_found(root, parent_path, "Parent node")
 		_discard_scene(root, is_live)
 		return err
+
+	if dimension.is_empty():
+		dimension = _dimension_of(parent)
+		if dimension.is_empty():
+			dimension = "2D"
+
+	var node_type: String = "NavigationRegion2D" if dimension == "2D" else "NavigationRegion3D"
+	if node_name.strip_edges().is_empty():
+		node_name = node_type
 
 	var region: Node = ClassDB.instantiate(node_type)
 	region.name = node_name
@@ -202,19 +207,15 @@ func _navigation_polygon_bounds(np: NavigationPolygon) -> Rect2:
 func setup_navigation_agent(args: Dictionary) -> Dictionary:
 	var scene_path: String = _ensure_res_path(str(args.get(&"scene_path", "")))
 	var parent_path: String = str(args.get(&"parent_path", "."))
-	var dimension: String = str(args.get(&"dimension", "2D"))
+	var dimension: String = str(args.get(&"dimension", ""))
 	var node_name: String = str(args.get(&"node_name", ""))
 	var radius = args.get(&"radius")
 	var max_speed = args.get(&"max_speed")
 
 	if scene_path.strip_edges() == "res://":
 		return {&"ok": false, &"error": "Missing 'scene_path'"}
-	if dimension not in ["2D", "3D"]:
+	if not dimension.is_empty() and dimension not in ["2D", "3D"]:
 		return {&"ok": false, &"error": "Invalid 'dimension': %s. Use '2D' or '3D'." % dimension}
-
-	var node_type: String = "NavigationAgent2D" if dimension == "2D" else "NavigationAgent3D"
-	if node_name.strip_edges().is_empty():
-		node_name = node_type
 
 	var result := _acquire_scene(scene_path)
 	if not result[2].is_empty():
@@ -227,6 +228,15 @@ func setup_navigation_agent(args: Dictionary) -> Dictionary:
 		var err := _node_not_found(root, parent_path, "Parent node")
 		_discard_scene(root, is_live)
 		return err
+
+	if dimension.is_empty():
+		dimension = _dimension_of(parent)
+		if dimension.is_empty():
+			dimension = "2D"
+
+	var node_type: String = "NavigationAgent2D" if dimension == "2D" else "NavigationAgent3D"
+	if node_name.strip_edges().is_empty():
+		node_name = node_type
 
 	var agent: Node = ClassDB.instantiate(node_type)
 	agent.name = node_name
@@ -347,5 +357,25 @@ func get_navigation_info(args: Dictionary) -> Dictionary:
 		info[&"max_speed"] = float(target.get(&"max_speed"))
 		info[&"avoidance_enabled"] = bool(target.get(&"avoidance_enabled"))
 
+	# node_path defaults to the root, which is rarely the navigation node — the
+	# answer was then a shell naming the root's class and nothing else, with no
+	# sign that the tool had simply been pointed at the wrong node. Say so, and
+	# name the nodes it would have something to report on.
+	if info.size() == 4:
+		var found: Array[String] = []
+		_collect_navigation_nodes(root, root, found)
+		info[&"note"] = "'%s' (%s) holds no navigation settings." % [node_path, target.get_class()]
+		info[&"navigation_nodes"] = found
+		if found.is_empty():
+			info[&"note"] += " This scene has no navigation nodes — setup_navigation_region adds one."
+		else:
+			info[&"note"] += " Pass one of navigation_nodes as node_path."
+
 	_discard_scene(root, is_live)
 	return info
+
+func _collect_navigation_nodes(scene_root: Node, node: Node, out: Array[String]) -> void:
+	for child in node.get_children():
+		if child is NavigationRegion2D or child is NavigationRegion3D 			or child is NavigationAgent2D or child is NavigationAgent3D:
+			out.append(str(scene_root.get_path_to(child)))
+		_collect_navigation_nodes(scene_root, child, out)
